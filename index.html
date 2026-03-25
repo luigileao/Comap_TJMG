@@ -2738,7 +2738,7 @@ function exportHTML(id){
     +'body{background:#fff;}'
     +'}'
     +'</style></head><body>'
-    +'<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>'
+    +'<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>'
     +'<div class="btn-bar">'
     +'<button class="print-btn" onclick="window.print()">🖨️ Imprimir</button>'
     +'<button class="pdf-btn" id="btn-pdf" onclick="gerarPDF(this)">📄 Exportar PDF A4</button>'
@@ -2852,7 +2852,7 @@ function exportHTML(id){
     +'</div>'  /* corpo */
     +'</div>'  /* page */
     +'<div id="foto-lb" onclick="fecharLB()"><img id="foto-lb-img" src=""><div id="foto-lb-cap"></div></div>'
-    +'<script>'
+    +'<scr'+'ipt>'
     +'function abrirLB(fig){'
     +'var img=fig.querySelector("img");'
     +'var cap=fig.querySelector("figcaption");'
@@ -2877,7 +2877,7 @@ function exportHTML(id){
     +'.then(function(){btn.disabled=false;btn.textContent="\uD83D\uDCC4 Exportar PDF A4";})'
     +'.catch(function(){btn.disabled=false;btn.textContent="\uD83D\uDCC4 Exportar PDF A4";});'
     +'}'
-    +'</script>'
+    +'<\/script>'
     +'</body></html>';
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
