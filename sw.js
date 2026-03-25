@@ -1,8 +1,8 @@
 /* TJMG Fiscal — Service Worker v44
-   Compatível com Supabase sync
-   Regra: Supabase e CDN externos NUNCA são interceptados
-   App shell (index.html, sw.js, manifest.json) = network-first com fallback cache
-   Demais assets estáticos = cache-first com atualização em background
+   Estratégia:
+   - App shell (index.html, sw.js, manifest.json) → network-first, fallback cache
+   - Demais assets → cache-first, atualiza cache em background SEM clone bug
+   - Domínios externos (Supabase, CDN, Google) → nunca interceptados
 */
 
 const V = 'tjmg-v44';
@@ -12,25 +12,24 @@ const CACHE = [
   './manifest.json'
 ];
 
-/* Domínios externos que NUNCA devem ser interceptados */
-const BYPASS_DOMAINS = [
+const BYPASS = [
   'supabase.co',
   'googleapis.com',
   'gstatic.com',
   'firebase',
   'cdn.jsdelivr.net',
-  'dns.google',
-  'fonts.googleapis.com',
-  'fonts.gstatic.com'
+  'cdnjs.cloudflare.com',
+  'script.google.com',
+  'dns.google'
 ];
 
-/* ── Install: pré-cacheia o app shell ── */
+/* ── Install ── */
 self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(V).then(function(c) {
       return c.addAll(CACHE);
     }).catch(function(err) {
-      console.warn('[SW] Install cache falhou:', err);
+      console.warn('[SW] install cache falhou:', err);
     })
   );
   self.skipWaiting();
@@ -44,79 +43,80 @@ self.addEventListener('activate', function(e) {
         keys.filter(function(k) { return k !== V; })
             .map(function(k) { return caches.delete(k); })
       );
-    }).then(function() {
-      return self.clients.claim();
-    })
+    }).then(function() { return self.clients.claim(); })
   );
 });
 
-/* ── Mensagens do app (skipWaiting) ── */
+/* ── Mensagens (skipWaiting) ── */
 self.addEventListener('message', function(e) {
-  if (!e.data) return;
-  if (e.data === 'skipWaiting' || e.data.type === 'SKIP_WAITING') {
+  if (e.data === 'skipWaiting' || (e.data && e.data.type === 'SKIP_WAITING')) {
     self.skipWaiting();
   }
 });
 
-/* ── Fetch: estratégia por tipo de request ── */
+/* ── Fetch ── */
 self.addEventListener('fetch', function(e) {
-  /* Ignora métodos não-GET */
   if (e.request.method !== 'GET') return;
 
   var url;
   try { url = new URL(e.request.url); } catch(err) { return; }
 
-  /* Ignora domínios externos (Supabase, CDN, Google Fonts, etc.) */
-  var isBypass = BYPASS_DOMAINS.some(function(d) {
-    return url.hostname.includes(d);
-  });
-  if (isBypass) return;
+  /* Ignora domínios externos */
+  if (BYPASS.some(function(d) { return url.hostname.includes(d); })) return;
 
-  /* Ignora requests de outras origens */
-  var isSameOrigin = url.origin === self.location.origin;
-  if (!isSameOrigin) return;
+  /* Ignora outras origens */
+  if (url.origin !== self.location.origin) return;
 
-  /* App shell = network-first, fallback para cache */
   var path = url.pathname;
-  var isAppShell = (
+  var isShell = (
     path.endsWith('/index.html') ||
-    path.endsWith('/sw.js') ||
+    path.endsWith('/sw.js')      ||
     path.endsWith('/manifest.json') ||
     path === '/' ||
     path.endsWith('/')
   );
 
-  if (isAppShell) {
+  if (isShell) {
+    /* Network-first para o app shell */
     e.respondWith(
       fetch(e.request, { cache: 'no-store' })
         .then(function(r) {
           if (r && r.ok) {
+            /* Clona ANTES de retornar — body ainda não foi lido */
             var copy = r.clone();
             caches.open(V).then(function(c) { c.put(e.request, copy); });
           }
           return r;
         })
         .catch(function() {
-          return caches.match(e.request).then(function(cached) {
-            return cached || caches.match('./index.html');
-          });
+          return caches.match(e.request)
+            .then(function(hit) { return hit || caches.match('./index.html'); });
         })
     );
     return;
   }
 
-  /* Demais assets = cache-first, atualiza em background */
+  /* Cache-first para outros assets
+     Background update: faz fetch separado para não reutilizar body */
   e.respondWith(
     caches.match(e.request).then(function(cached) {
-      var networkFetch = fetch(e.request).then(function(r) {
+      if (cached) {
+        /* Atualiza o cache em background com um fetch independente */
+        caches.open(V).then(function(c) {
+          fetch(e.request).then(function(fresh) {
+            if (fresh && fresh.ok) c.put(e.request, fresh);
+          }).catch(function() {});
+        });
+        return cached;
+      }
+      /* Não tem cache — busca na rede e armazena */
+      return fetch(e.request).then(function(r) {
         if (r && r.ok) {
-          caches.open(V).then(function(c) { c.put(e.request, r.clone()); });
+          var copy = r.clone();
+          caches.open(V).then(function(c) { c.put(e.request, copy); });
         }
         return r;
-      }).catch(function() {
-        return cached;
       });
-      return cached || networkFetch;
     })
   );
 });
