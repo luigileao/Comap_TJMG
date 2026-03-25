@@ -1150,6 +1150,9 @@ var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestr
 var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
+// ── Google Drive (Apps Script) ─────────────────────────────────────────────
+// Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
+var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
 var SB=null;
 var Sync={
   ready:false,
@@ -2885,6 +2888,52 @@ function exportHTML(id){
   a.download='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
   a.click();
   Tt('\u2705 Relat\u00f3rio exportado com sucesso!');
+  // ── Envia para o Google Drive em background ────────────────────────────────
+  enviarParaDrive(i, html);
+}
+
+/* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
+function enviarParaDrive(insp, htmlStr){
+  if(!DRIVE_SCRIPT_URL)return; // URL não configurada → silencioso
+  try{
+    // Coleta todas as fotos de todos os itens
+    var fotos=[];
+    Object.keys(insp.itens||{}).forEach(function(k){
+      var it=insp.itens[k];
+      if(!it||!it.fotos||!it.fotos.length)return;
+      it.fotos.forEach(function(f,fi){
+        var nomeItem=(it.n||k).replace(/[^a-zA-Z0-9.]/g,'_');
+        fotos.push({
+          nome: nomeItem+'_foto_'+(fi+1)+'.jpg',
+          b64:  f.b64
+        });
+      });
+    });
+    var payload={
+      regiao:      insp.reg||'',
+      comarca:     insp.com||'',
+      edif:        insp.edif||'',
+      tipo:        insp.tipo||'',
+      protocolo:   insp.protocolo||gerarProtocolo(insp),
+      dataVistoria:fdt(insp.dtVistoria||insp.data),
+      html:        htmlStr,
+      fotos:       fotos
+    };
+    fetch(DRIVE_SCRIPT_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    })
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res&&res.ok){
+        Tt('\u2601\ufe0f Drive: salvo em '+payload.regiao+'/'+payload.comarca);
+      }else{
+        console.warn('Drive script retornou erro:',res);
+      }
+    })
+    .catch(function(e){console.warn('Envio ao Drive falhou:',e);});
+  }catch(e){console.warn('enviarParaDrive erro:',e);}
 }
 
 
