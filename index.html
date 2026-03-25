@@ -1245,7 +1245,13 @@ var Sync={
       var ur=await SB.from('app_users').select('*').order('nome');
       if(!ur.error&&Array.isArray(ur.data)&&ur.data.length)this.mergeRemoteUsers(ur.data);
       var ir=await SB.from('inspections').select('id,payload,updated_at').order('updated_at',{ascending:false});
-      if(!ir.error&&Array.isArray(ir.data))this.mergeRemoteInspections(ir.data);
+      if(!ir.error&&Array.isArray(ir.data)){
+        this.mergeRemoteInspections(ir.data);
+        var remoteIds=ir.data.map(function(r){return r.id;});
+        S.insp=S.insp.filter(function(i){
+          return i.st==='em_andamento'||remoteIds.indexOf(i.id)!==-1;
+        });
+      }
       DB.svLocal();
     }catch(e){console.warn('Pull Supabase falhou',e);}
   },
@@ -2980,46 +2986,71 @@ function rAdm(){
     ab.innerHTML=h;
   }
   else if(S.dadm==='relatorios'){
+    S._admSel=S._admSel||[];
     var _admReg=S._admReg||'todos';
     var _admBase=_admReg==='todos'?S.insp:S.insp.filter(function(i){return i.reg===_admReg;});
     var r2=_admBase.filter(function(i){return i.st==='em_andamento';});
     var e2=_admBase.filter(function(i){return i.st==='finalizada';});
+    var allIds=_admBase.map(function(i){return i.id;});
+    var nSel=S._admSel.length;
+    var todosSelected=allIds.length>0&&allIds.every(function(id){return S._admSel.indexOf(id)!==-1;});
+
     var h2='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #f1f5f9;">';
     h2+='<button onclick="S._admReg=\'todos\';rAdm()" style="border:none;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;background:'+(_admReg==='todos'?'#003580':'#f1f5f9')+';color:'+(_admReg==='todos'?'#fff':'#64748b')+';">Todas</button>';
     Object.keys(REG).forEach(function(rk){var R=REG[rk];h2+='<button onclick="S._admReg=\''+rk+'\';rAdm()" style="border:none;padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;background:'+(_admReg===rk?R.c:'#f1f5f9')+';color:'+(_admReg===rk?'#fff':'#64748b')+';">'+R.l+'</button>';});
     h2+='</div>';
 
-    /* ── Rascunhos ── */
+    /* Barra de ação de seleção */
+    if(nSel>0){
+      h2+='<div style="position:sticky;top:0;z-index:10;background:#003580;border-radius:12px;padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">';
+      h2+='<span style="font-size:12px;font-weight:800;color:#fff;flex:1;">'+nSel+' selecionada(s)</span>';
+      h2+='<button onclick="admExpSel()" style="background:#16a34a;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;">📄 Exportar</button>';
+      h2+='<button onclick="admDelSel()" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;">🗑 Excluir</button>';
+      h2+='<button onclick="S._admSel=[];rAdm()" style="background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:8px;padding:7px 10px;font-size:11px;cursor:pointer;">✕ Limpar</button>';
+      h2+='</div>';
+    }
+
+    /* Botão selecionar todos */
+    h2+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">';
+    h2+='<button onclick="admSelAll()" style="border:1px solid #e2e8f0;background:'+(todosSelected?'#003580':'#f8fafc')+';color:'+(todosSelected?'#fff':'#64748b')+';border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;">'+(todosSelected?'☑ Desmarcar todos':'☐ Selecionar todos')+'</button>';
+    if(nSel>0)h2+='<span style="font-size:11px;color:#003580;font-weight:700;">'+nSel+' de '+allIds.length+' selecionada(s)</span>';
+    h2+='</div>';
+
+    /* Rascunhos */
     h2+='<div class="sec">Rascunhos ('+r2.length+')</div>';
     r2.forEach(function(i){
       var t=TIPOS[i.tipo]||TIPOS.periodica;
-      h2+='<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
-        +'<div style="width:34px;height:34px;border-radius:8px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+t.i+'</div>'
+      var sel=S._admSel.indexOf(i.id)!==-1;
+      h2+='<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;border:2px solid '+(sel?'#003580':'transparent')+';cursor:pointer;" onclick="admToggleSel(\''+i.id+'\')">'
+        +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(sel?'#003580':'#cbd5e1')+';background:'+(sel?'#003580':'#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;color:#fff;">'+(sel?'✓':'')+'</div>'
+        +'<div style="width:32px;height:32px;border-radius:8px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">'+t.i+'</div>'
         +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:12px;font-weight:700;">'+i.edif+'</div>'
         +'<div style="font-size:10px;color:#64748b;">'+(i.com||'-')+' - '+fdt(i.dtVistoria||i.data)+'</div>'
         +'<span class="bdg" style="background:'+t.bg+';color:'+t.c+';">'+t.l+'</span>'
         +'</div>'
-        +'<div style="display:flex;flex-direction:column;gap:5px;">'
-        +'<button class="btn br" style="padding:7px 12px;width:auto;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
-        +'<button class="btn bo" style="padding:7px 12px;width:auto;font-size:11px;" onclick="openDet(\''+i.id+'\')">Ver</button>'
+        +'<div style="display:flex;flex-direction:column;gap:4px;" onclick="event.stopPropagation();">'
+        +'<button class="btn br" style="padding:6px 10px;width:auto;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
+        +'<button class="btn bo" style="padding:6px 10px;width:auto;font-size:11px;" onclick="openDet(\''+i.id+'\')">Ver</button>'
         +'</div></div>';
     });
 
-    /* ── Enviados ── */
+    /* Enviados */
     h2+='<div class="sec" style="margin-top:12px;">Enviados ('+e2.length+')</div>';
     e2.forEach(function(i){
       var t=TIPOS[i.tipo]||TIPOS.periodica;
-      h2+='<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer;" onclick="openDet(\''+i.id+'\')">'
-        +'<div style="width:34px;height:34px;border-radius:8px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+t.i+'</div>'
+      var sel=S._admSel.indexOf(i.id)!==-1;
+      h2+='<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;border:2px solid '+(sel?'#003580':'transparent')+';cursor:pointer;" onclick="admToggleSel(\''+i.id+'\')">'
+        +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(sel?'#003580':'#cbd5e1')+';background:'+(sel?'#003580':'#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;color:#fff;">'+(sel?'✓':'')+'</div>'
+        +'<div style="width:32px;height:32px;border-radius:8px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">'+t.i+'</div>'
         +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:12px;font-weight:700;">'+i.edif+'</div>'
         +'<div style="font-size:10px;color:#64748b;">'+(i.com||'-')+' - '+fdt(i.dtVistoria||i.data)+'</div>'
         +'<span class="bdg" style="background:'+t.bg+';color:'+t.c+';">'+t.l+'</span>'
         +'</div>'
-        +'<div style="display:flex;flex-direction:column;gap:5px;">'
-        +'<button class="btn bo" style="padding:7px 12px;width:auto;font-size:11px;" onclick="event.stopPropagation();openDet(\''+i.id+'\')">👁 Ver</button>'
-        +'<button class="btn" style="padding:7px 12px;width:auto;font-size:11px;background:#003580;color:#fff;" onclick="event.stopPropagation();exportHTML(\''+i.id+'\')">📄 HTML</button>'
+        +'<div style="display:flex;flex-direction:column;gap:4px;" onclick="event.stopPropagation();">'
+        +'<button class="btn bo" style="padding:6px 10px;width:auto;font-size:11px;" onclick="openDet(\''+i.id+'\')">👁 Ver</button>'
+        +'<button class="btn" style="padding:6px 10px;width:auto;font-size:11px;background:#003580;color:#fff;" onclick="exportHTML(\''+i.id+'\')">📄 HTML</button>'
         +'</div></div>';
     });
 
@@ -3134,6 +3165,41 @@ function deleteUser(id){
     Sync.queueDeleteUser(id);
     DB.sv();rAdm();rLogin();Tt('Usuário removido.');
   });
+}
+/* ── Seleção múltipla no painel admin ── */
+function admToggleSel(id){
+  S._admSel=S._admSel||[];
+  var idx=S._admSel.indexOf(id);
+  if(idx===-1)S._admSel.push(id);
+  else S._admSel.splice(idx,1);
+  rAdm();
+}
+function admSelAll(){
+  var _admReg=S._admReg||'todos';
+  var base=_admReg==='todos'?S.insp:S.insp.filter(function(i){return i.reg===_admReg;});
+  var allIds=base.map(function(i){return i.id;});
+  S._admSel=S._admSel||[];
+  var todosSelected=allIds.every(function(id){return S._admSel.indexOf(id)!==-1;});
+  if(todosSelected){S._admSel=[];}
+  else{S._admSel=allIds.slice();}
+  rAdm();
+}
+function admDelSel(){
+  S._admSel=S._admSel||[];
+  if(!S._admSel.length)return;
+  var n=S._admSel.length;
+  cf('🗑','Excluir selecionados','Excluir '+n+' inspeção(ões) selecionada(s)?',function(){
+    S._admSel.forEach(function(id){Sync.queueDeleteInspection(id);});
+    S.insp=S.insp.filter(function(i){return S._admSel.indexOf(i.id)===-1;});
+    S._admSel=[];
+    DB.sv();rAdm();Tt(n+' excluída(s)');
+  });
+}
+function admExpSel(){
+  S._admSel=S._admSel||[];
+  var ids=S._admSel.filter(function(id){var i=S.insp.find(function(x){return x.id===id;});return i&&i.st==='finalizada';});
+  if(!ids.length){Tt('Nenhuma finalizada selecionada');return;}
+  ids.forEach(function(id,idx){setTimeout(function(){exportHTML(id);},idx*600);});
 }
 function iniciarProgramada(){
   var osps=filterByReg(S.insp).filter(function(i){return i.tipo==='osp';});
