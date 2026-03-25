@@ -1,11 +1,11 @@
-/* TJMG Fiscal — Service Worker v45
+/* TJMG Fiscal — Service Worker v46
    Estratégia:
    - App shell (index.html, sw.js, manifest.json) → network-first, fallback cache
    - Demais assets → cache-first, atualiza cache em background SEM clone bug
    - Domínios externos (Supabase, CDN, Google) → nunca interceptados
 */
 
-const V = 'tjmg-v45';
+const V = 'tjmg-v46';
 const CACHE = [
   './',
   './index.html',
