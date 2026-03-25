@@ -355,7 +355,7 @@ var US=[
 ];
 var ADM={u:'admin',p:'1530'};
 var COORD={u:'coord',p:'2026'};
-var REG={NORTE:{l:'Norte',c:'#2563eb',bg:'#dbeafe'},CENTRAL:{l:'Central',c:'#7c3aed',bg:'#ede9fe'},LESTE:{l:'Leste',c:'#16a34a',bg:'#dcfce7'},ZONA_MATA:{l:'Zona da Mata',c:'#b45309',bg:'#fef3c7'},TRIANGULO:{l:'Tri\u00e2ngulo',c:'#0891b2',bg:'#cffafe'},SUL:{l:'Sul',c:'#be185d',bg:'#fce7f3'},SUDOESTE:{l:'Sudoeste',c:'#65a30d',bg:'#ecfccb'}};
+var REG={NORTE:{l:'Norte',ct:'CT 017-2026',c:'#2563eb',bg:'#dbeafe'},CENTRAL:{l:'Central',ct:'CT 025-2026',c:'#7c3aed',bg:'#ede9fe'},LESTE:{l:'Leste',ct:'CT 019-2026',c:'#16a34a',bg:'#dcfce7'},ZONA_MATA:{l:'Zona da Mata',ct:'CT 018-2026',c:'#b45309',bg:'#fef3c7'},TRIANGULO:{l:'Tri\u00e2ngulo',ct:'CT 392-2022',c:'#0891b2',bg:'#cffafe'},SUL:{l:'Sul',ct:'CT 138-2023',c:'#be185d',bg:'#fce7f3'},SUDOESTE:{l:'Sudoeste',ct:'CT 421-2022',c:'#65a30d',bg:'#ecfccb'}};
 var TIPOS={
   periodica:  {l:'RITMP \u2013 Manuten\u00e7\u00e3o Peri\u00f3dica',c:'#16a34a',bg:'#dcfce7',i:'&#128295;',e:['Dados','Checklist','Materiais','Concluir']},
   ose:        {l:'RITE \u2013 Emergencial',c:'#dc2626',bg:'#fee2e2',i:'&#9889;',e:['Dados','Sistemas','Sel. Atividades','Atividades','Materiais','Concluir']},
@@ -1219,10 +1219,12 @@ var Sync={
   },
   mergeRemoteInspections:function(rows){
     if(!Array.isArray(rows))return;
+    var deleted=this.deletedInsps;
     var localById={};
     S.insp.forEach(function(i){localById[i.id]=i;});
     rows.forEach(function(row){
       if(!row||!row.id||!row.payload)return;
+      if(deleted.indexOf(row.id)!==-1)return;
       var remote=row.payload;
       remote.id=row.id;
       var local=localById[row.id];
@@ -1629,7 +1631,7 @@ function rHome(){
   var R=REG[s.reg]||{l:s.reg||'',c:'#003580',bg:'#dbeafe'};
   var ola=el('h-ola'),sub=el('h-sub');
   if(ola)ola.textContent='Ola, '+s.nome.split(' ')[0]+'!';
-  if(sub)sub.textContent='Contrato TJMG CT 017/2026 - Regiao '+R.l;
+  if(sub)sub.textContent='Contrato TJMG '+(R.ct||'CT 017/2026')+' - Regiao '+R.l;
   var ub=el('ubar');
   if(ub)ub.innerHTML='<div class="av" style="width:34px;height:34px;font-size:12px;background:'+R.c+';">'+ini(s.nome)+'</div>'
     +'<div style="flex:1;"><div style="font-size:12px;font-weight:700;">'+s.nome+'</div>'
@@ -1749,8 +1751,8 @@ function rPerf(){
     ?'<span class="bdg" style="background:#fef3c7;color:#d97706;">'+(s.tipo==='admin'?'🔑 Admin':'📋 Coordenador')+'</span>'
     :'<span class="bdg" style="background:'+R.bg+';color:'+R.c+';">Região '+R.l+'</span>';
   var _contrato=_global
-    ?'<div class="card"><b style="color:#003580;">Nº:</b> 017/2026<br><b style="color:#003580;">Acesso:</b> Global</div>'
-    :'<div class="card"><b style="color:#003580;">Nº:</b> 017/2026<br><b style="color:#003580;">Região:</b> '+R.l+'</div>';
+    ?'<div class="card"><b style="color:#003580;">Nº:</b> CT 017/2026 (Global)<br><b style="color:#003580;">Acesso:</b> Global</div>'
+    :'<div class="card"><b style="color:#003580;">Nº:</b> '+(R.ct||'CT 017/2026')+'<br><b style="color:#003580;">Região:</b> '+R.l+'</div>';
   var h='<div class="card" style="text-align:center;padding:20px;">'
     +'<div class="av" style="width:64px;height:64px;font-size:22px;background:'+R.c+';margin:0 auto 10px;">'+ini(s.nome)+'</div>'
     +'<div style="font-size:16px;font-weight:800;">'+s.nome+'</div>'
@@ -3288,7 +3290,7 @@ function rFDados(c){
   } else {
     h+='<div style="background:'+R.c+';border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:8px;">';
     h+='<div style="background:rgba(255,255,255,.15);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#fff;">🔒 Região '+R.l+'</div>';
-    h+='<div style="font-size:10px;color:rgba(255,255,255,.8);">Contrato 017/2026 – TJMG · Região completa</div></div>';
+    h+='<div style="font-size:10px;color:rgba(255,255,255,.8);">'+(R.ct||'CT 017/2026')+' – TJMG · Região completa</div></div>';
   }
 
   // SELECT COMARCA (toda a região, sem filtro de polo)
