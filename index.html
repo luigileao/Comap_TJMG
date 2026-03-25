@@ -2517,7 +2517,7 @@ function exportHTML(id){
       var stv=ST[it.s||'pendente']||ST.pendente;
       var sIco=_sIco[it.s||'pendente']||'⏳';var sC=_sCls[it.s||'pendente']||'st-pend';
       var fotosHtml='';
-      if(it.fotos&&it.fotos.length){fotosHtml='<div class="foto-grid">';it.fotos.forEach(function(f){fotosHtml+='<figure class="foto-item"><img src="'+f.b64+'" alt="'+(f.leg||'Foto')+'" loading="lazy"><figcaption>'+(f.leg||'')+'</figcaption></figure>';});fotosHtml+='</div>';}
+      if(it.fotos&&it.fotos.length){fotosHtml='<div class="foto-grid">';it.fotos.forEach(function(f,fi){fotosHtml+='<figure class="foto-item" onclick="abrirLB(this)"><img src="'+f.b64+'" alt="'+(f.leg||'Foto')+'" loading="lazy"><figcaption>'+(f.leg||'')+'</figcaption></figure>';});fotosHtml+='</div>';}
       var matsHtml='';
       if(it.mats&&it.mats.length){matsHtml='<div class="mat-blk">🔧 '+it.mats.map(function(m){return'<span class="mat-tag">'+m.d+' &times;'+m.q+' '+m.u+'</span>';}).join('')+'</div>';}
       var obsHtml=it.obs?'<div class="obs-blk">💬 '+it.obs+'</div>':'';
@@ -2612,7 +2612,7 @@ function exportHTML(id){
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0;}'
     +'body{font-family:"Inter",sans-serif;background:#e8edf2;color:#1a2332;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
-    +'.print-btn{position:fixed;bottom:28px;right:28px;z-index:999;background:'+tipoCorHex+';color:#fff;border:none;border-radius:12px;padding:14px 24px;font-family:"Inter",sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;letter-spacing:.3px;}'
+    +'.btn-bar{position:fixed;bottom:28px;right:28px;z-index:999;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}'+'.print-btn{background:'+tipoCorHex+';color:#fff;border:none;border-radius:12px;padding:13px 22px;font-family:"Inter",sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;letter-spacing:.3px;white-space:nowrap;}'+'.pdf-btn{background:#1a2332;color:#fff;border:none;border-radius:12px;padding:13px 22px;font-family:"Inter",sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;letter-spacing:.3px;white-space:nowrap;}'+'.pdf-btn:disabled{opacity:.6;cursor:wait;}'
     +'.page{max-width:900px;margin:24px auto;background:#fff;box-shadow:0 4px 32px rgba(0,0,0,.12);}'
     /* Topo institucional */
     +'.topo{background:'+tipoCorHex+';padding:0;}'
@@ -2695,10 +2695,15 @@ function exportHTML(id){
     +'.st-pend{background:#fffbeb;color:#d97706;border:1px solid #fde68a;}'
     +'.st-fp,.st-prog{background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe;}'
     +'.obs-blk{display:flex;align-items:flex-start;gap:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin:5px 0;font-size:11px;color:#78350f;line-height:1.5;}'
-    +'.foto-grid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px;}'
-    +'.foto-item{display:flex;flex-direction:column;align-items:center;}'
-    +'.foto-item img{width:130px;height:98px;object-fit:cover;border-radius:7px;border:1px solid #dde3ec;}'
-    +'.foto-item figcaption{font-size:9px;color:#94a3b8;margin-top:3px;text-align:center;max-width:130px;}'
+    +'.foto-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:10px 0 6px;}'
+    +'.foto-item{display:flex;flex-direction:column;border-radius:10px;overflow:hidden;border:1px solid #dde3ec;background:#f8fafc;cursor:zoom-in;box-shadow:0 1px 4px rgba(0,0,0,.07);}'
+    +'.foto-item img{width:100%;height:200px;object-fit:cover;display:block;transition:opacity .15s;}'
+    +'.foto-item img:hover{opacity:.88;}'
+    +'.foto-item figcaption{font-size:11px;color:#64748b;padding:6px 10px;text-align:center;background:#f8fafc;min-height:26px;}'
+    +'#foto-lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out;}'
+    +'#foto-lb.open{display:flex;}'
+    +'#foto-lb img{max-width:94vw;max-height:90vh;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);}'
+    +'#foto-lb-cap{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.65);color:#fff;padding:7px 20px;border-radius:20px;font-size:13px;pointer-events:none;white-space:nowrap;}'
     +'.mat-blk{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}'
     +'.mat-tag{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600;}'
     /* Materiais globais */
@@ -2723,14 +2728,21 @@ function exportHTML(id){
     +'.ass-mat{font-family:"JetBrains Mono",monospace;font-size:10px;color:#94a3b8;margin-top:2px;}'
     +'.rodape-rit{margin-top:32px;padding:14px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;font-size:10px;color:#94a3b8;line-height:1.7;}'
     +'@media print{'
-    +'.print-btn{display:none!important;}'
+    +'.btn-bar{display:none!important;}'
     +'.page{max-width:100%;box-shadow:none;margin:0;}'
     +'.topo{-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'.item-row,.secao{break-inside:avoid;}'
+    +'.foto-grid{grid-template-columns:repeat(2,1fr)!important;}'
+    +'.foto-item img{height:160px!important;}'
+    +'#foto-lb{display:none!important;}'
     +'body{background:#fff;}'
     +'}'
     +'</style></head><body>'
-    +'<button class="print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>'
+    +'<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>'
+    +'<div class="btn-bar">'
+    +'<button class="print-btn" onclick="window.print()">🖨️ Imprimir</button>'
+    +'<button class="pdf-btn" id="btn-pdf" onclick="gerarPDF(this)">📄 Exportar PDF A4</button>'
+    +'</div>'
     +'<div class="page">'
     /* ── Topo ── */
     +'<div class="topo">'
@@ -2839,6 +2851,33 @@ function exportHTML(id){
     +'</div>'
     +'</div>'  /* corpo */
     +'</div>'  /* page */
+    +'<div id="foto-lb" onclick="fecharLB()"><img id="foto-lb-img" src=""><div id="foto-lb-cap"></div></div>'
+    +'<script>'
+    +'function abrirLB(fig){'
+    +'var img=fig.querySelector("img");'
+    +'var cap=fig.querySelector("figcaption");'
+    +'document.getElementById("foto-lb-img").src=img.src;'
+    +'document.getElementById("foto-lb-cap").textContent=cap?cap.textContent:"";'
+    +'document.getElementById("foto-lb").classList.add("open");'
+    +'}'
+    +'function fecharLB(){document.getElementById("foto-lb").classList.remove("open");}'
+    +'document.addEventListener("keydown",function(e){if(e.key==="Escape")fecharLB();});'
+    +'function gerarPDF(btn){'
+    +'btn.disabled=true;btn.textContent="Gerando PDF...";'
+    +'var el=document.querySelector(".page");'
+    +'var nomeArq=document.title.replace(/[^a-zA-Z0-9_\\-]/g,"_")+".pdf";'
+    +'html2pdf().set({'
+    +'margin:[10,8,10,8],'
+    +'filename:nomeArq,'
+    +'image:{type:"jpeg",quality:0.96},'
+    +'html2canvas:{scale:2,useCORS:true,logging:false,'
+    +'windowWidth:900,scrollY:0},'
+    +'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}'
+    +'}).from(el).save()'
+    +'.then(function(){btn.disabled=false;btn.textContent="\uD83D\uDCC4 Exportar PDF A4";})'
+    +'.catch(function(){btn.disabled=false;btn.textContent="\uD83D\uDCC4 Exportar PDF A4";});'
+    +'}'
+    +'</script>'
     +'</body></html>';
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
