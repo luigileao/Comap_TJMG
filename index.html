@@ -2614,14 +2614,14 @@ function exportHTML(id){
     +'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">'
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0;}'
-    +'body{font-family:"Inter",sans-serif;background:#e8edf2;color:#1a2332;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+    +'body{font-family:"Inter",sans-serif;background:#e8edf2;color:#1a2332;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow-x:hidden;}'
     +'.btn-bar{position:fixed;bottom:28px;right:28px;z-index:999;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}'+'.print-btn{background:'+tipoCorHex+';color:#fff;border:none;border-radius:12px;padding:13px 22px;font-family:"Inter",sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;letter-spacing:.3px;white-space:nowrap;}'+'.pdf-btn{background:#1a2332;color:#fff;border:none;border-radius:12px;padding:13px 22px;font-family:"Inter",sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;align-items:center;gap:8px;letter-spacing:.3px;white-space:nowrap;}'+'.pdf-btn:disabled{opacity:.6;cursor:wait;}'
-    +'.page{max-width:900px;margin:24px auto;background:#fff;box-shadow:0 4px 32px rgba(0,0,0,.12);}'
+    +'.page{max-width:860px;margin:24px auto;background:#fff;box-shadow:0 4px 32px rgba(0,0,0,.12);overflow:hidden;word-break:break-word;}'
     /* Topo institucional */
     +'.topo{background:'+tipoCorHex+';padding:0;}'
     +'.topo-strip{height:6px;background:rgba(255,255,255,.25);}'
-    +'.topo-body{padding:28px 36px 24px;display:flex;align-items:flex-start;gap:20px;}'
-    +'.topo-brasao{width:64px;height:64px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;flex-shrink:0;}'
+    +'.topo-body{padding:20px 24px 18px;display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;}'
+    +'.topo-brasao{width:52px;height:52px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}'
     +'.topo-inst{flex:1;}'
     +'.topo-estado{font-size:9px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:3px;}'
     +'.topo-nome{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;line-height:1.2;}'
@@ -2630,24 +2630,24 @@ function exportHTML(id){
     +'.doc-label{font-size:9px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,.6);}'
     +'.doc-num{font-family:"JetBrains Mono",monospace;font-size:14px;font-weight:600;color:#fff;margin-top:2px;}'
     /* Faixa tipo */
-    +'.tipo-faixa{background:#1a2332;padding:12px 36px;display:flex;align-items:center;justify-content:space-between;}'
+    +'.tipo-faixa{background:#1a2332;padding:10px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;}'
     +'.tipo-badge{background:'+tipoCorHex+';color:#fff;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:.5px;}'
     +'.tipo-data{font-size:11px;color:rgba(255,255,255,.5);font-family:"JetBrains Mono",monospace;}'
     /* Corpo */
-    +'.corpo{padding:32px 36px;}'
+    +'.corpo{padding:24px;}'
     /* Ficha técnica */
     +'.ficha{border:1px solid #dde3ec;border-radius:10px;overflow:hidden;margin-bottom:24px;}'
     +'.ficha-title{background:#f0f4f9;padding:10px 16px;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#64748b;border-bottom:1px solid #dde3ec;}'
-    +'.ficha-grid{display:grid;grid-template-columns:repeat(3,1fr);}'
+    +'.ficha-grid{display:grid;grid-template-columns:repeat(2,1fr);}'
     +'.ficha-item{padding:12px 16px;border-right:1px solid #eef1f6;border-bottom:1px solid #eef1f6;}'
     +'.ficha-item:nth-child(3n){border-right:none;}'
     +'.ficha-label{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;}'
     +'.ficha-val{font-size:13px;font-weight:600;color:#1a2332;}'
     +'.ficha-val.mono{font-family:"JetBrains Mono",monospace;font-size:12px;color:'+tipoCorHex+';}'
     /* KPIs */
-    +'.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}'
-    +'.kpi{border-radius:10px;padding:16px 18px;border:1px solid #dde3ec;}'
-    +'.kpi-num{font-size:32px;font-weight:800;line-height:1;margin-bottom:4px;}'
+    +'.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}'
+    +'.kpi{border-radius:10px;padding:12px 14px;border:1px solid #dde3ec;}'
+    +'.kpi-num{font-size:26px;font-weight:800;line-height:1;margin-bottom:4px;}'
     +'.kpi-lbl{font-size:10px;font-weight:600;letter-spacing:.5px;color:#64748b;}'
     +'.kpi-total{background:#1a2332;border-color:#1a2332;}.kpi-total .kpi-num,.kpi-total .kpi-lbl{color:#fff;}'
     +'.kpi-ok{background:#f0fdf4;border-color:#bbf7d0;}.kpi-ok .kpi-num{color:#16a34a;}'
@@ -2732,13 +2732,15 @@ function exportHTML(id){
     +'.rodape-rit{margin-top:32px;padding:14px 20px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;font-size:10px;color:#94a3b8;line-height:1.7;}'
     +'@media print{'
     +'.btn-bar{display:none!important;}'
-    +'.page{max-width:100%;box-shadow:none;margin:0;}'
+    +'.page{max-width:100%!important;box-shadow:none;margin:0;overflow:hidden;}'
     +'.topo{-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
     +'.item-row,.secao{break-inside:avoid;}'
     +'.foto-grid{grid-template-columns:repeat(2,1fr)!important;}'
-    +'.foto-item img{height:160px!important;}'
+    +'.foto-item img{height:130px!important;}'
     +'#foto-lb{display:none!important;}'
-    +'body{background:#fff;}'
+    +'body{background:#fff;overflow-x:hidden;}'
+    +'.ficha-grid{grid-template-columns:repeat(2,1fr)!important;}'
+    +'.kpis{grid-template-columns:repeat(2,1fr)!important;}'
     +'}'
     +'</style></head><body>'
     +'<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>'
@@ -2870,11 +2872,11 @@ function exportHTML(id){
     +'var el=document.querySelector(".page");'
     +'var nomeArq=document.title.replace(/[^a-zA-Z0-9_\\-]/g,"_")+".pdf";'
     +'html2pdf().set({'
-    +'margin:[10,8,10,8],'
+    +'margin:[12,10,12,10],'
     +'filename:nomeArq,'
-    +'image:{type:"jpeg",quality:0.96},'
+    +'image:{type:"jpeg",quality:0.95},'
     +'html2canvas:{scale:2,useCORS:true,logging:false,'
-    +'windowWidth:900,scrollY:0},'
+    +'windowWidth:820,scrollY:0,x:0,y:0},'
     +'jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}'
     +'}).from(el).save()'
     +'.then(function(){btn.disabled=false;btn.textContent="\uD83D\uDCC4 Exportar PDF A4";})'
@@ -2919,18 +2921,15 @@ function enviarParaDrive(insp, htmlStr){
       html:        htmlStr,
       fotos:       fotos
     };
+    // no-cors: contorna CORS do Apps Script — resposta opaca, mas dados chegam
     fetch(DRIVE_SCRIPT_URL,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
       body:JSON.stringify(payload)
     })
-    .then(function(r){return r.json();})
-    .then(function(res){
-      if(res&&res.ok){
-        Tt('\u2601\ufe0f Drive: salvo em '+payload.regiao+'/'+payload.comarca);
-      }else{
-        console.warn('Drive script retornou erro:',res);
-      }
+    .then(function(){
+      Tt('\u2601\ufe0f Drive: enviado para '+payload.regiao+'/'+payload.comarca);
     })
     .catch(function(e){console.warn('Envio ao Drive falhou:',e);});
   }catch(e){console.warn('enviarParaDrive erro:',e);}
