@@ -1386,31 +1386,57 @@ var Sync={
     var deleted=this.deletedInsps;
     var localById={};
     S.insp.forEach(function(i){localById[i.id]=i;});
+
+    /* Coleta IDs que precisam de merge para pre-carregar fotos do IDB */
+    var idsParaMerge=[];
     rows.forEach(function(row){
       if(!row||!row.id||!row.payload)return;
-      /* Verifica blacklist no formato novo {id,_t} ou legado string */
       if(deleted.some(function(e){return e===row.id||(e&&e.id===row.id);}))return;
-      var remote=row.payload;
-      remote.id=row.id;
       var local=localById[row.id];
+      var remoteTs=Date.parse((row.payload&&row.payload.updated_at)||row.updated_at||0)||0;
       var localTs=local&&Date.parse(local.updated_at||local.dt||0)||0;
-      var remoteTs=Date.parse(remote.updated_at||row.updated_at||0)||0;
-      if(!local){
-        /* Nova inspeção vinda do Supabase: fotos ficam no IndexedDB daquele dispositivo */
-        S.insp.unshift(remote);
-      }else if(remoteTs>=localTs){
-        /* Preserva fotos locais (estão no IndexedDB): payload do Supabase não tem base64 */
-        var _fotosLocais={};
-        Object.keys(local.itens||{}).forEach(function(k){
-          if((local.itens[k].fotos||[]).length)_fotosLocais[k]=local.itens[k].fotos;
-        });
-        Object.keys(remote).forEach(function(k){local[k]=remote[k];});
-        /* Restaura fotos que estavam em memória */
-        Object.keys(_fotosLocais).forEach(function(k){
-          if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosLocais[k];
-        });
-      }
+      if(local&&remoteTs>=localTs)idsParaMerge.push(row.id);
     });
+
+    /* Pre-carrega fotos do IDB para TODOS os itens que serao mesclados,
+       garantindo que nenhuma foto seja perdida mesmo apos svLocal ter zerado
+       os arrays em memoria. */
+    var preload=idsParaMerge.map(function(id){
+      var local=localById[id];if(!local)return Promise.resolve();
+      return PhotoStore.loadForInsp(local).catch(function(){});
+    });
+
+    Promise.all(preload).then(function(){
+      rows.forEach(function(row){
+        if(!row||!row.id||!row.payload)return;
+        /* Verifica blacklist no formato novo {id,_t} ou legado string */
+        if(deleted.some(function(e){return e===row.id||(e&&e.id===row.id);}))return;
+        var remote=row.payload;
+        remote.id=row.id;
+        var local=localById[row.id];
+        var localTs=local&&Date.parse(local.updated_at||local.dt||0)||0;
+        var remoteTs=Date.parse(remote.updated_at||row.updated_at||0)||0;
+        if(!local){
+          /* Nova inspecao vinda do Supabase: fotos ficam no IndexedDB daquele dispositivo */
+          S.insp.unshift(remote);
+        }else if(remoteTs>=localTs){
+          /* Preserva fotos locais — agora garantidamente carregadas do IDB acima */
+          var _fotosLocais={};
+          Object.keys(local.itens||{}).forEach(function(k){
+            if((local.itens[k].fotos||[]).length)_fotosLocais[k]=local.itens[k].fotos;
+          });
+          Object.keys(remote).forEach(function(k){local[k]=remote[k];});
+          /* Restaura fotos no objeto mesclado */
+          Object.keys(_fotosLocais).forEach(function(k){
+            if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosLocais[k];
+          });
+          /* Re-persiste fotos no IDB para garantir consistencia */
+          Object.keys(_fotosLocais).forEach(function(k){
+            PhotoStore.put(local.id+'::'+k,_fotosLocais[k]);
+          });
+        }
+      });
+    }).catch(function(e){console.warn('[merge] falhou preload fotos:',e);});
   },
   mergeRemoteUsers:function(rows){
     if(!Array.isArray(rows)||!rows.length)return;
@@ -3583,45 +3609,110 @@ function _doExportHTML(id){
 
 /* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
 function enviarParaDrive(insp, htmlStr){
-  if(!DRIVE_SCRIPT_URL)return; // URL não configurada → silencioso
+  if(!DRIVE_SCRIPT_URL)return;
   try{
-    // Coleta todas as fotos de todos os itens
-    var fotos=[];
-    Object.keys(insp.itens||{}).forEach(function(k){
-      var it=insp.itens[k];
-      if(!it||!it.fotos||!it.fotos.length)return;
-      it.fotos.forEach(function(f,fi){
-        var nomeItem=(it.n||k).replace(/[^a-zA-Z0-9.]/g,'_');
-        fotos.push({
-          nome: nomeItem+'_foto_'+(fi+1)+'.jpg',
-          b64:  f.b64
-        });
-      });
-    });
-    var payload={
+    var protocolo=insp.protocolo||gerarProtocolo(insp);
+    var meta={
       regiao:      insp.reg||'',
       comarca:     insp.com||'',
       edif:        insp.edif||'',
       tipo:        insp.tipo||'',
-      protocolo:   insp.protocolo||gerarProtocolo(insp),
-      dataVistoria:fdt(insp.dtVistoria||insp.data),
-      html:        htmlStr,
-      fotos:       fotos
+      protocolo:   protocolo,
+      dataVistoria:fdt(insp.dtVistoria||insp.data)
     };
-    // no-cors: contorna CORS do Apps Script — resposta opaca, mas dados chegam
-    fetch(DRIVE_SCRIPT_URL,{
-      method:'POST',
-      mode:'no-cors',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify(payload)
-    })
-    .then(function(){
-      Tt('\u2601\ufe0f Drive: enviado para '+payload.regiao+'/'+payload.comarca);
-    })
-    .catch(function(e){console.warn('Envio ao Drive falhou:',e);});
+
+    /* ── Envia HTML em chunks via GET (contorna no-cors que descarta body em POST) ── */
+    var CHUNK=6000;
+    var htmlB64=btoa(unescape(encodeURIComponent(htmlStr)));
+    var totalChunks=Math.ceil(htmlB64.length/CHUNK)||1;
+
+    function _get(url){
+      return fetch(url,{method:'GET',mode:'no-cors'}).catch(function(e){console.warn('Drive GET erro:',e);});
+    }
+
+    function enviarChunk(idx){
+      var parte=htmlB64.slice(idx*CHUNK,(idx+1)*CHUNK);
+      var url=DRIVE_SCRIPT_URL
+        +'?protocolo='+encodeURIComponent(protocolo)
+        +'&chunk='+idx
+        +'&total='+totalChunks
+        +'&parte='+encodeURIComponent(parte);
+      if(idx===0){
+        url+='&regiao='+encodeURIComponent(meta.regiao)
+          +'&comarca='+encodeURIComponent(meta.comarca)
+          +'&edif='+encodeURIComponent(meta.edif)
+          +'&tipo='+encodeURIComponent(meta.tipo)
+          +'&dataVistoria='+encodeURIComponent(meta.dataVistoria);
+        Tt('\u2601\ufe0f Drive: salvando '+meta.edif+' ('+totalChunks+' partes)...');
+      }
+      return _get(url);
+    }
+
+    /* Envia chunks em sequencia com delay para nao sobrecarregar o Apps Script */
+    var ci=0;
+    function proximoChunk(){
+      if(ci>=totalChunks){
+        /* Apos todo HTML, envia fotos individualmente em lotes de 5 */
+        enviarFotos();
+        return;
+      }
+      enviarChunk(ci).then(function(){
+        ci++;
+        setTimeout(proximoChunk,250);
+      });
+    }
+    proximoChunk();
+
+    /* ── Envia fotos em lotes — cada foto dividida em sub-chunks de 6KB ── */
+    function enviarFotos(){
+      var fotos=[];
+      Object.keys(insp.itens||{}).forEach(function(k){
+        var it=insp.itens[k];
+        if(!it||!it.fotos||!it.fotos.length)return;
+        it.fotos.forEach(function(f,fi){
+          if(!f||!f.b64)return;
+          var nomeItem=(it.n||k).replace(/[^a-zA-Z0-9.]/g,'_');
+          fotos.push({nome:nomeItem+'_foto_'+(fi+1)+'.jpg',b64:f.b64});
+        });
+      });
+      if(!fotos.length){
+        Tt('\u2705 Drive: relatório salvo — '+protocolo);
+        return;
+      }
+      var FCHUNK=5000;
+      var tarefas=[];
+      fotos.forEach(function(f){
+        var total=Math.ceil(f.b64.length/FCHUNK)||1;
+        for(var i=0;i<total;i++){
+          tarefas.push({
+            nome: f.nome,
+            protocolo: protocolo,
+            chunk: i,
+            total: total,
+            parte: f.b64.slice(i*FCHUNK,(i+1)*FCHUNK)
+          });
+        }
+      });
+      var fi=0;
+      function proximaFoto(){
+        if(fi>=tarefas.length){
+          Tt('\u2705 Drive: '+fotos.length+' foto(s) salva(s) — '+protocolo);
+          return;
+        }
+        var t=tarefas[fi];
+        var url=DRIVE_SCRIPT_URL
+          +'?protocolo='+encodeURIComponent(t.protocolo)
+          +'&foto='+encodeURIComponent(t.nome)
+          +'&fchunk='+t.chunk
+          +'&ftotal='+t.total
+          +'&b64='+encodeURIComponent(t.parte);
+        _get(url).then(function(){fi++;setTimeout(proximaFoto,200);});
+      }
+      proximaFoto();
+    }
+
   }catch(e){console.warn('enviarParaDrive erro:',e);}
 }
-
 
 function rAdm(){
   var abs=[{id:'usuarios',l:'Usuários'},{id:'relatorios',l:'Relatórios'},{id:'emergencial',l:'Emergencial'},{id:'config',l:'Config'}];
