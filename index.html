@@ -6776,7 +6776,7 @@ setInterval(function(){
   if(Sync.ready&&navigator.onLine&&!document.hidden){
     Sync.pullAll().then(function(){Sync.schedulePush(1000);});
   }
-},60000);
+},300000);
 bootApp();
 
 
