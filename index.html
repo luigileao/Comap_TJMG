@@ -1371,13 +1371,18 @@ var Sync={
   pullAll:async function(){
     if(!this.ready||!navigator.onLine)return;
     try{
+      if((this.deletedInsps.length||this.deletedUsers.length)&&!this.busy){
+        try{await this.pushAll();}catch(e){console.warn('pre-pull push falhou',e);}
+      }
       var ur=await SB.from('app_users').select('*').order('nome');
       if(!ur.error&&Array.isArray(ur.data)&&ur.data.length)this.mergeRemoteUsers(ur.data);
       var ir=await SB.from('inspections').select('id,payload,updated_at').order('updated_at',{ascending:false});
       if(!ir.error&&Array.isArray(ir.data)){
         this.mergeRemoteInspections(ir.data);
         var remoteIds=ir.data.map(function(r){return r.id;});
+        var _pendDel=this.deletedInsps;
         S.insp=S.insp.filter(function(i){
+          if(_pendDel.indexOf(i.id)!==-1)return false;
           return i.st==='em_andamento'||remoteIds.indexOf(i.id)!==-1;
         });
       }
@@ -3223,7 +3228,7 @@ function rAdm(){
   _cfgH+='<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:8px;">Dados e PCI</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:4px;"><b>PCI Norte:</b> '+PCI_DATA.length+' registros &#9989;</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:8px;color:#64748b;">NORTE 71 &middot; LESTE 61 &middot; ZONA_MATA 67 &middot; CENTRAL 37 edif.</div>';
-  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todas as inspeções?\',function(){S.insp=[];DB.sv();Tt(\'Limpo\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
+  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todas as inspeções?\',function(){S.insp.forEach(function(i){Sync.queueDeleteInspection(i.id);});S.insp=[];DB.sv();Tt(\'Limpo\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
   ab.innerHTML=_cfgH;
 }
 }
