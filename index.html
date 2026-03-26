@@ -1473,22 +1473,121 @@ function stopAutoSave(){
   if(autoSaveTimer){clearInterval(autoSaveTimer);autoSaveTimer=null;}
 }
 
+/* ── PhotoStore: IndexedDB para fotos (ilimitado, offline) ──────────────── */
+var PhotoStore=(function(){
+  var DB_NAME='tjmg_fotos',DB_VER=1,STORE='fotos';
+  var _db=null;
+  function open(){
+    return new Promise(function(res,rej){
+      if(_db){res(_db);return;}
+      var req=indexedDB.open(DB_NAME,DB_VER);
+      req.onupgradeneeded=function(e){
+        var db=e.target.result;
+        if(!db.objectStoreNames.contains(STORE))
+          db.createObjectStore(STORE,{keyPath:'id'});
+      };
+      req.onsuccess=function(e){_db=e.target.result;res(_db);};
+      req.onerror=function(){rej(req.error);};
+    });
+  }
+  /* Salva array de fotos de um item: chave = inspId+'::'+itemKey */
+  function put(chave,fotos){
+    return open().then(function(db){
+      return new Promise(function(res,rej){
+        var tx=db.transaction(STORE,'readwrite');
+        tx.objectStore(STORE).put({id:chave,fotos:fotos});
+        tx.oncomplete=function(){res();};
+        tx.onerror=function(){rej(tx.error);};
+      });
+    });
+  }
+  /* Lê fotos de um item */
+  function get(chave){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction(STORE,'readonly');
+        var req=tx.objectStore(STORE).get(chave);
+        req.onsuccess=function(){res((req.result&&req.result.fotos)||[]);};
+        req.onerror=function(){res([]);};
+      });
+    });
+  }
+  /* Remove fotos de um item */
+  function del(chave){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction(STORE,'readwrite');
+        tx.objectStore(STORE).delete(chave);
+        tx.oncomplete=function(){res();};
+        tx.onerror=function(){res();};
+      });
+    });
+  }
+  /* Lista todas as chaves */
+  function listKeys(){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction(STORE,'readonly');
+        var req=tx.objectStore(STORE).getAllKeys();
+        req.onsuccess=function(){res(req.result||[]);};
+        req.onerror=function(){res([]);};
+      });
+    });
+  }
+  /* Migração: move fotos do localStorage para o IndexedDB */
+  function migrate(insps){
+    var promises=[];
+    insps.forEach(function(insp){
+      Object.keys(insp.itens||{}).forEach(function(k){
+        var it=insp.itens[k];
+        if(it.fotos&&it.fotos.length){
+          var chave=insp.id+'::'+k;
+          promises.push(put(chave,it.fotos));
+          it.fotos=[];/* remove base64 do localStorage */
+        }
+      });
+    });
+    return Promise.all(promises);
+  }
+  /* Restaura fotos dos itens de uma inspeção antes de exibir */
+  function loadForInsp(insp){
+    var promises=Object.keys(insp.itens||{}).map(function(k){
+      var chave=insp.id+'::'+k;
+      return get(chave).then(function(fotos){
+        if(fotos&&fotos.length)insp.itens[k].fotos=fotos;
+      });
+    });
+    return Promise.all(promises);
+  }
+  /* Apaga todas as fotos de uma inspeção (ao excluir) */
+  function delInsp(inspId,itemKeys){
+    return Promise.all((itemKeys||[]).map(function(k){return del(inspId+'::'+k);}));
+  }
+  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp};
+})();
+
 var DB={
   svLocal:function(){
     setTimeout(function(){
       try{
-        localStorage.setItem('ti',JSON.stringify(S.insp));
+        /* Salva fotos no IndexedDB e remove base64 do objeto antes do localStorage */
+        var inspSemFotos=S.insp.map(function(insp){
+          var clone=JSON.parse(JSON.stringify(insp));
+          Object.keys(clone.itens||{}).forEach(function(k){
+            var fotos=clone.itens[k].fotos||[];
+            if(fotos.length){
+              PhotoStore.put(insp.id+'::'+k,fotos);
+              clone.itens[k].fotos=[];
+            }
+          });
+          return clone;
+        });
+        localStorage.setItem('ti',JSON.stringify(inspSemFotos));
         if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
         localStorage.setItem('tu',JSON.stringify(US));
       }catch(e){
-        try{
-          S.insp.forEach(function(insp){
-            Object.keys(insp.itens||{}).forEach(function(k){
-              if(insp.itens[k].fotos&&insp.itens[k].fotos.length>2){insp.itens[k].fotos=insp.itens[k].fotos.slice(-2);}
-            });
-          });
-          localStorage.setItem('ti',JSON.stringify(S.insp));
-        }catch(e2){console.warn('Storage cheio:',e2);Tt('Armazenamento cheio. Exclua inspeções antigas.');}
+        console.warn('Erro ao salvar local:',e);
+        Tt('Erro ao salvar. Tente novamente.');
       }
     },0);
   },
@@ -1497,9 +1596,12 @@ var DB={
     /* updated_at marcado individualmente em cada operação */
     Sync.schedulePush(600);
   },
-  ld:function(){try{var i=localStorage.getItem('ti');if(i)S.insp=JSON.parse(i);
+  ld:function(){try{var i=localStorage.getItem('ti');if(i){S.insp=JSON.parse(i);
+    var _temAntigas=S.insp.some(function(insp){return Object.keys(insp.itens||{}).some(function(k){return(insp.itens[k].fotos||[]).length>0;});});
+    if(_temAntigas){PhotoStore.migrate(S.insp).then(function(){DB.svLocal();console.log('[PhotoStore] Migracao concluida.');});}
+    Promise.all(S.insp.map(function(insp){return PhotoStore.loadForInsp(insp);})).catch(function(){});}
     var s=localStorage.getItem('ts');if(s){var d=JSON.parse(s);if(Date.now()-(d._t||0)<28800000)S.sessao=d;else localStorage.removeItem('ts');}
-    var u=localStorage.getItem('tu');if(u){var ul=JSON.parse(u);if(ul&&ul.length){US.splice(0,US.length);ul.forEach(function(x){US.push(x);});}}
+    var u=localStorage.getItem('tu');if(u){var ul=JSON.parse(u);if(ul&&ul.length){US.splice(0,US.length);ul.forEach(function(x){US.push(x);})}}
     var _defaultUS=[
       {id:'u1',nome:'Edenias Gonzaga Leão',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio Técnico',polo:'Montes Claros',ativo:true},
       {id:'u2',nome:'Túlio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
@@ -1857,7 +1959,7 @@ function rHome(){
       else{h+='<div style="font-size:10px;color:#64748b;">'+fdth(i.data)+'</div>';}
       h+='</div></div><div style="display:flex;gap:6px;">'
         +'<button class="btn br" style="flex:1;padding:8px;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
-        +(canDelInsp(i)?'<button onclick="cf(\'X\',\'Excluir\',\'Excluir?\',(function(xid){return function(){S.insp=S.insp.filter(function(x){return x.id!==xid;});Sync.queueDeleteInspection(xid);DB.sv();rHome();};})(\'' +i.id+ '\'))" style="background:#f1f5f9;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;">X</button>':'')
+        +(canDelInsp(i)?'<button onclick="cf(\'X\',\'Excluir\',\'Excluir?\',(function(xid){return function(){var _dkeys=Object.keys((S.insp.find(function(x){return x.id===xid;})||{itens:{}}).itens||{});S.insp=S.insp.filter(function(x){return x.id!==xid;});PhotoStore.delInsp(xid,_dkeys);Sync.queueDeleteInspection(xid);DB.sv();rHome();};})(\'' +i.id+ '\'))" style="background:#f1f5f9;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;">X</button>':'')
         +'</div></div>';
     });
   }
@@ -2430,6 +2532,11 @@ function retomarF(id){
 
 function openDet(id){
   S.did=id;var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
+  /* Carrega fotos do IndexedDB para garantir badges corretos */
+  PhotoStore.loadForInsp(i).then(function(){_renderDet(id);}).catch(function(){_renderDet(id);});
+}
+function _renderDet(id){
+  var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   ensureDraftItems(i);
   var t=TIPOS[i.tipo]||TIPOS.periodica;
   el('dt').textContent=i.edif;el('ds').textContent=t.l+' - '+(i.com||'-')+' - '+fdt(i.dtVistoria||i.data);
@@ -2573,7 +2680,7 @@ function openDet(id){
 function delDet(){
   var _i=S.insp.find(function(x){return x.id===S.did;});
   if(!canDelInsp(_i)){Tt('Sem permissão para excluir este item.');return;}
-  cf('X','Excluir','Excluir esta inspeção?',function(){S.insp=S.insp.filter(function(x){return x.id!==S.did;});Sync.queueDeleteInspection(S.did);DB.sv();Gb('s-home');rHome();Tt('Excluído');});
+  cf('X','Excluir','Excluir esta inspeção?',function(){var _dkeys2=Object.keys((S.insp.find(function(x){return x.id===S.did;})||{itens:{}}).itens||{});S.insp=S.insp.filter(function(x){return x.id!==S.did;});PhotoStore.delInsp(S.did,_dkeys2);Sync.queueDeleteInspection(S.did);DB.sv();Gb('s-home');rHome();Tt('Excluído');});
 }
 
 // ── Fotos e Materiais por item ──────────────────────────────────
@@ -2689,7 +2796,13 @@ function openFormItem(k){
 
 function openItem(iid,k){
   var i=S.insp.find(function(x){return x.id===iid;});if(!i||!i.itens[k])return;
-  _eid=iid;_eMode='insp';_openItemModal(i.itens[k],k);
+  _eid=iid;_eMode='insp';
+  /* Garante que fotos estejam carregadas do IndexedDB antes de abrir */
+  var chave=iid+'::'+k;
+  PhotoStore.get(chave).then(function(fotos){
+    if(fotos&&fotos.length)i.itens[k].fotos=fotos;
+    _openItemModal(i.itens[k],k);
+  }).catch(function(){_openItemModal(i.itens[k],k);});
 }
 
 function setISt(k){
@@ -2709,23 +2822,33 @@ function setISt(k){
 
 function saveItem(){
   var obs=el('iob').value;
+  var fotosClone=JSON.parse(JSON.stringify(_ifotos));
+  var matsClone=JSON.parse(JSON.stringify(_imats));
   if(_eMode==='form'){
     F.itens[_ekey].obs=obs;
-    F.itens[_ekey].fotos=JSON.parse(JSON.stringify(_ifotos));
-    F.itens[_ekey].mats=JSON.parse(JSON.stringify(_imats));
+    F.itens[_ekey].fotos=fotosClone;
+    F.itens[_ekey].mats=matsClone;
+    /* Persiste fotos do form draft no IndexedDB */
+    PhotoStore.put('form::'+_ekey,fotosClone);
     syncDraftFromF(true);
     cm('m-item');Tt('Item salvo ✓');rFe();
   } else {
     var i=S.insp.find(function(x){return x.id===_eid;});if(!i)return;
     i.itens[_ekey].obs=obs;
-    i.itens[_ekey].fotos=JSON.parse(JSON.stringify(_ifotos));
-    i.itens[_ekey].mats=JSON.parse(JSON.stringify(_imats));
+    i.itens[_ekey].fotos=fotosClone;
+    i.itens[_ekey].mats=matsClone;
+    /* Persiste fotos no IndexedDB (fora do localStorage) */
+    PhotoStore.put(_eid+'::'+_ekey,fotosClone);
+    /* Zera base64 no objeto em memória para não poluir localStorage */
+    i.itens[_ekey].fotos=[];
     if(i.snap&&i.snap.itens&&i.snap.itens[_ekey]){
       i.snap.itens[_ekey].s=i.itens[_ekey].s;
       i.snap.itens[_ekey].obs=i.itens[_ekey].obs;
-      i.snap.itens[_ekey].fotos=JSON.parse(JSON.stringify(i.itens[_ekey].fotos||[]));
+      i.snap.itens[_ekey].fotos=[];
       i.snap.itens[_ekey].mats=JSON.parse(JSON.stringify(i.itens[_ekey].mats||[]));
     }
+    /* Restaura fotos na memória para uso imediato (badge de contagem) */
+    i.itens[_ekey].fotos=fotosClone;
     DB.sv();cm('m-item');Tt('Item salvo ✓');openDet(_eid);
   }
 }
@@ -3395,7 +3518,7 @@ function rAdm(){
   _cfgH+='<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:8px;">Dados e PCI</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:4px;"><b>PCI Norte:</b> '+PCI_DATA.length+' registros &#9989;</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:8px;color:#64748b;">NORTE 71 &middot; LESTE 61 &middot; ZONA_MATA 67 &middot; CENTRAL 37 edif.</div>';
-  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todos os FINALIZADOS? Rascunhos serão mantidos.\',function(){var _del=S.insp.filter(function(i){return canDelInsp(i);});_del.forEach(function(i){Sync.queueDeleteInspection(i.id);});S.insp=S.insp.filter(function(i){return!canDelInsp(i);});DB.sv();Tt(\'Finalizados removidos — rascunhos mantidos\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
+  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todos os FINALIZADOS? Rascunhos serão mantidos.\',function(){var _del=S.insp.filter(function(i){return canDelInsp(i);});_del.forEach(function(i){var _dk=Object.keys(i.itens||{});PhotoStore.delInsp(i.id,_dk);Sync.queueDeleteInspection(i.id);});S.insp=S.insp.filter(function(i){return!canDelInsp(i);});DB.sv();Tt(\'Finalizados removidos — rascunhos mantidos\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
   ab.innerHTML=_cfgH;
 }
 }
