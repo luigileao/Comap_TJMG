@@ -9,6 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#003580">
 <link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./favicon.ico" type="image/x-icon">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>TJMG Fiscal</title>
 <style>
@@ -1412,9 +1413,10 @@ var Sync={
     if(!S.sessao)return;
     try{
       /* Envia deleções pendentes ANTES de buscar, para evitar que
-         itens deletados neste dispositivo voltem via merge */
+         itens deletados neste dispositivo voltem via merge.
+         Usa pushUsers somente (leve) para não acionar o pushInspections pesado no boot */
       if((this.deletedInsps.length||this.deletedUsers.length)&&!this.busy){
-        try{await this.pushAll();}catch(e){console.warn('pre-pull push falhou',e);}
+        try{await this.pushUsers();}catch(e){console.warn('pre-pull push falhou',e);}
       }
       var ur=await SB.from('app_users').select('*').order('nome');
       if(!ur.error&&Array.isArray(ur.data)&&ur.data.length)this.mergeRemoteUsers(ur.data);
@@ -1480,14 +1482,17 @@ var Sync={
       return i.updated_at>=cutoff;
     });
     if(!toSync.length)return;
-    /* Lotes de 10: cada upsert carrega payload JSONB pesado;
-       lotes pequenos ficam dentro do statement_timeout do Supabase free */
-    var UPSERT_LOTE=10;
+    /* Lotes de 3: payload JSONB pesado + statement_timeout do Supabase free (~8s);
+       pausa de 500ms entre lotes para não sobrecarregar o banco */
+    var UPSERT_LOTE=3;
     for(var off=0;off<toSync.length;off+=UPSERT_LOTE){
       var lote=toSync.slice(off,off+UPSERT_LOTE);
       var payload=lote.map(this.normalizeInspection.bind(this));
       var up=await SB.from('inspections').upsert(payload,{onConflict:'id'});
       if(up.error)throw up.error;
+      if(off+UPSERT_LOTE<toSync.length){
+        await new Promise(function(r){setTimeout(r,500);});
+      }
     }
   },
   pushAll:async function(){
