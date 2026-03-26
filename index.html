@@ -1491,16 +1491,18 @@ var Sync={
       return i.updated_at>=cutoff;
     });
     if(!toSync.length)return;
-    /* Lotes de 3: payload JSONB pesado + statement_timeout do Supabase free (~8s);
-       pausa de 500ms entre lotes para não sobrecarregar o banco */
-    var UPSERT_LOTE=3;
+    /* Usa RPC upsert_inspections que executa com statement_timeout=0
+       (SET LOCAL na função PL/pgSQL), contornando o limite do plano free.
+       Lotes de 5: seguro pois o timeout não se aplica mais. */
+    var UPSERT_LOTE=5;
     for(var off=0;off<toSync.length;off+=UPSERT_LOTE){
       var lote=toSync.slice(off,off+UPSERT_LOTE);
-      var payload=lote.map(this.normalizeInspection.bind(this));
-      var up=await SB.from('inspections').upsert(payload,{onConflict:'id'});
-      if(up.error)throw up.error;
+      var rows=lote.map(this.normalizeInspection.bind(this));
+      var rpc=await SB.rpc('upsert_inspections',{rows:rows});
+      if(rpc.error)throw rpc.error;
+      if(rpc.data&&rpc.data.ok===false)throw new Error(rpc.data.error||'upsert_inspections falhou');
       if(off+UPSERT_LOTE<toSync.length){
-        await new Promise(function(r){setTimeout(r,500);});
+        await new Promise(function(r){setTimeout(r,300);});
       }
     }
   },
