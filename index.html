@@ -1343,9 +1343,18 @@ var Sync={
   normalizeInspection:function(i){
     /* Clona sem base64 de fotos para não estourar o payload do Supabase */
     var payloadLimpo=JSON.parse(JSON.stringify(i));
+    /* Remove fotos de itens normais */
     Object.keys(payloadLimpo.itens||{}).forEach(function(k){
       if(payloadLimpo.itens[k].fotos)payloadLimpo.itens[k].fotos=[];
     });
+    /* Remove fotos de subestações (sub) — chk, trafos, disjs, secc */
+    var sub=payloadLimpo.sub;
+    if(sub){
+      if(sub.chk)Object.keys(sub.chk).forEach(function(k){if(sub.chk[k])sub.chk[k].fotos=[];});
+      if(Array.isArray(sub.trafos))sub.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
+      if(Array.isArray(sub.disjs))sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
+      if(Array.isArray(sub.secc))sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
+    }
     return {
       id:i.id,
       tipo:i.tipo||'',
