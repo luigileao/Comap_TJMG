@@ -1457,14 +1457,35 @@ var Sync={
        não sejam re-publicados pelo upsert abaixo. */
     if(this.deletedInsps.length){
       var _idsParaDel=this.deletedInsps.map(function(e){return typeof e==='string'?e:e.id;});
-      var dl=await SB.from('inspections').delete().in('id',_idsParaDel);
-      if(dl.error)throw dl.error;
+      /* Lotes de 50 para o delete (IDs são curtos, sem problema de timeout) */
+      var DEL_LOTE=50;
+      for(var di=0;di<_idsParaDel.length;di+=DEL_LOTE){
+        var dlLote=_idsParaDel.slice(di,di+DEL_LOTE);
+        var dl=await SB.from('inspections').delete().in('id',dlLote);
+        if(dl.error)throw dl.error;
+      }
       /* NÃO zeramos deletedInsps — a lista funciona como blacklist permanente.
          Garante que inspeções deletadas nunca ressuscitem via sync de outro dispositivo. */
       this.saveState();
     }
-    if(S.insp.length){
-      var payload=S.insp.map(this.normalizeInspection.bind(this));
+    if(!S.insp.length)return;
+    /* Filtra o que realmente precisa subir:
+       - rascunhos (em_andamento): sempre sincroniza
+       - finalizadas recentes (últimas 48h): garante propagação imediata
+       - finalizadas antigas: o Supabase já tem; evita re-push desnecessário */
+    var cutoff=new Date(Date.now()-48*3600*1000).toISOString();
+    var toSync=S.insp.filter(function(i){
+      if(i.st==='em_andamento')return true;
+      if(!i.updated_at)return true;            /* sem timestamp: assume novo */
+      return i.updated_at>=cutoff;
+    });
+    if(!toSync.length)return;
+    /* Lotes de 10: cada upsert carrega payload JSONB pesado;
+       lotes pequenos ficam dentro do statement_timeout do Supabase free */
+    var UPSERT_LOTE=10;
+    for(var off=0;off<toSync.length;off+=UPSERT_LOTE){
+      var lote=toSync.slice(off,off+UPSERT_LOTE);
+      var payload=lote.map(this.normalizeInspection.bind(this));
       var up=await SB.from('inspections').upsert(payload,{onConflict:'id'});
       if(up.error)throw up.error;
     }
@@ -1517,7 +1538,7 @@ function stopAutoSave(){
 
 /* ── PhotoStore: IndexedDB para fotos (ilimitado, offline) ──────────────── */
 var PhotoStore=(function(){
-  var DB_NAME='tjmg_fotos',DB_VER=1,STORE='fotos';
+  var DB_NAME='tjmg_fotos',DB_VER=2,STORE='fotos',INSP_STORE='insp_store';
   var _db=null;
   function open(){
     return new Promise(function(res,rej){
@@ -1527,6 +1548,9 @@ var PhotoStore=(function(){
         var db=e.target.result;
         if(!db.objectStoreNames.contains(STORE))
           db.createObjectStore(STORE,{keyPath:'id'});
+        /* v2: store para persistir S.insp sem limite de quota */
+        if(!db.objectStoreNames.contains(INSP_STORE))
+          db.createObjectStore(INSP_STORE,{keyPath:'k'});
       };
       req.onsuccess=function(e){_db=e.target.result;res(_db);};
       req.onerror=function(){rej(req.error);};
@@ -1645,7 +1669,28 @@ var PhotoStore=(function(){
       });
     }).catch(function(){});
   }
-  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp,putSubAll:putSubAll,loadSubAll:loadSubAll};
+  /* ── Persistência de S.insp no IDB (sem limite de quota) ──────────────── */
+  function putAllInsp(arr){
+    return open().then(function(db){
+      return new Promise(function(res,rej){
+        var tx=db.transaction(INSP_STORE,'readwrite');
+        tx.objectStore(INSP_STORE).put({k:'all',data:arr});
+        tx.oncomplete=function(){res();};
+        tx.onerror=function(){rej(tx.error);};
+      });
+    }).catch(function(e){console.warn('[IDB] putAllInsp falhou',e);});
+  }
+  function getAllInsp(){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction(INSP_STORE,'readonly');
+        var req=tx.objectStore(INSP_STORE).get('all');
+        req.onsuccess=function(){res((req.result&&req.result.data)||null);};
+        req.onerror=function(){res(null);};
+      });
+    }).catch(function(){return null;});
+  }
+  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp,putSubAll:putSubAll,loadSubAll:loadSubAll,putAllInsp:putAllInsp,getAllInsp:getAllInsp};
 })();
 
 var DB={
@@ -1675,7 +1720,21 @@ var DB={
           if(clone.sub.disjs)clone.sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
           if(clone.sub.secc)clone.sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
         });
-        localStorage.setItem('ti',JSON.stringify(inspSemFotos));
+        /* ── Persiste S.insp no IndexedDB (sem limite de quota) ── */
+        PhotoStore.putAllInsp(inspSemFotos);
+        /* ── Tenta também no localStorage (boot rápido); tolera quota cheia ── */
+        try{
+          localStorage.setItem('ti',JSON.stringify(inspSemFotos));
+        }catch(qe){
+          if(qe.name==='QuotaExceededError'||qe.code===22){
+            console.warn('[DB] localStorage quota excedida — IDB é a fonte primária');
+            localStorage.removeItem('ti');/* limpa dado obsoleto */
+            Tt('Armazenamento local cheio — dados salvos com segurança ✓');
+          }else{
+            console.warn('Erro ao salvar local:',qe);
+            Tt('Erro ao salvar. Tente novamente.');
+          }
+        }
         if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
         localStorage.setItem('tu',JSON.stringify(US));
       }catch(e){
@@ -1689,7 +1748,17 @@ var DB={
     /* updated_at marcado individualmente em cada operação */
     Sync.schedulePush(600);
   },
-  ld:function(){try{var i=localStorage.getItem('ti');if(i){S.insp=JSON.parse(i);
+  ld:async function(){try{
+    /* Carrega inspeções: localStorage (rápido) ou IDB (fallback quando quota excedida) */
+    var rawInsp=localStorage.getItem('ti');
+    if(!rawInsp){
+      var idbInsp=await PhotoStore.getAllInsp();
+      if(idbInsp&&idbInsp.length){
+        rawInsp=JSON.stringify(idbInsp);
+        console.log('[DB] Recuperado '+idbInsp.length+' insp. do IDB (localStorage vazio)');
+      }
+    }
+    if(rawInsp){S.insp=JSON.parse(rawInsp);
     var _temAntigas=S.insp.some(function(insp){return Object.keys(insp.itens||{}).some(function(k){return(insp.itens[k].fotos||[]).length>0;});});
     if(_temAntigas){PhotoStore.migrate(S.insp).then(function(){DB.svLocal();console.log('[PhotoStore] Migracao concluida.');});}
     Promise.all(S.insp.map(function(insp){
@@ -1990,7 +2059,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v54 - fotos sub IndexedDB, Drive auto, progresso fotos, blacklist 30d, pull limit
+// TJMG Fiscal PWA v55 - fix QuotaExceededError (IDB fallback), fix Supabase timeout (push em lotes)
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
@@ -6560,7 +6629,7 @@ if(isIOS&&!isSA){
 }
 
 async function bootApp(){
-  DB.ld();
+  await DB.ld();
   Sync.init();
   syncExistingDraftGroups();
   DB.svLocal();
