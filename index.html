@@ -1745,7 +1745,7 @@ var DB={
           if(qe.name==='QuotaExceededError'||qe.code===22){
             console.warn('[DB] localStorage quota excedida — IDB é a fonte primária');
             localStorage.removeItem('ti');/* limpa dado obsoleto */
-            Tt('Armazenamento local cheio — dados salvos com segurança ✓');
+            Tt('Dados salvos com segurança ✓');
           }else{
             console.warn('Erro ao salvar local:',qe);
             Tt('Erro ao salvar. Tente novamente.');
@@ -2075,7 +2075,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v55 - fix QuotaExceededError (IDB fallback), fix Supabase timeout (push em lotes)
+// TJMG Fiscal PWA v56 - fix QuotaExceededError (IDB fallback), fix Supabase timeout (push em lotes), toast storage simplificado
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
