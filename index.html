@@ -3682,11 +3682,13 @@ function enviarParaDrive(insp, htmlStr, onComplete){
       dataVistoria:fdt(insp.dtVistoria||insp.data)
     };
 
-    /* ── Envia via GET com CORS real + retry (v58 corrigido) ──
-       Apps Script publicado como "Qualquer pessoa" já responde com
-       Access-Control-Allow-Origin:* por padrão — não precisa de no-cors.
-       Com CORS real o fetch lê o status HTTP: retry dispara tanto em
-       falha de rede quanto em erros 4xx/5xx do servidor. */
+    /* ── Envia via GET com no-cors + retry (v58) ──
+       Apps Script faz redirect interno google.com→googleusercontent.com
+       que quebra CORS no browser — no-cors é necessário aqui.
+       A garantia de entrega vem do trigger assíncrono no Apps Script:
+       se um chunk chegar corrompido, o _finalizarHTML loga o erro e
+       limpa as props (finally), sem deixar lixo acumulado.
+       Retry de 3x cobre falhas de rede passageiras. */
     var CHUNK=1800;
     var htmlB64=btoa(unescape(encodeURIComponent(htmlStr)));
     var totalChunks=Math.ceil(htmlB64.length/CHUNK)||1;
@@ -3694,11 +3696,7 @@ function enviarParaDrive(insp, htmlStr, onComplete){
 
     function _getComRetry(url,tentativa){
       tentativa=tentativa||1;
-      return fetch(url,{method:'GET'})
-        .then(function(r){
-          if(!r.ok)throw new Error('HTTP '+r.status);
-          return r.text();
-        })
+      return fetch(url,{method:'GET',mode:'no-cors'})
         .catch(function(e){
           if(tentativa<MAX_RETRY){
             return new Promise(function(res){setTimeout(res,600*tentativa);})
