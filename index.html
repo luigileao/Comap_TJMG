@@ -1346,14 +1346,109 @@ var Sync={
     clearTimeout(self.timer);
     self.timer=setTimeout(function(){self.pushAll();},delay||800);
   },
-  normalizeInspection:function(i){
-    /* Clona sem base64 de fotos para não estourar o payload do Supabase */
+  /* ── Comprime uma foto para thumb de sincronização ────────────────────────
+     Reduz para maxDim px (largura ou altura, mantendo proporção) e
+     reencoda como JPEG com a qualidade informada.
+     Retorna Promise<string> com o novo dataURL (ou o original se falhar). */
+  comprimirFotoSync:function(b64,maxDim,qual){
+    maxDim=maxDim||480; qual=qual||0.45;
+    return new Promise(function(res){
+      try{
+        var img=new Image();
+        img.onload=function(){
+          try{
+            var w=img.naturalWidth,h=img.naturalHeight;
+            if(w>maxDim||h>maxDim){
+              if(w>=h){h=Math.round(h*(maxDim/w));w=maxDim;}
+              else{w=Math.round(w*(maxDim/h));h=maxDim;}
+            }
+            var cv=document.createElement('canvas');
+            cv.width=w;cv.height=h;
+            cv.getContext('2d').drawImage(img,0,0,w,h);
+            res(cv.toDataURL('image/jpeg',qual));
+          }catch(e){res(b64);}
+        };
+        img.onerror=function(){res(b64);};
+        img.src=b64;
+      }catch(e){res(b64);}
+    });
+  },
+  /* ── Versão async de normalizeInspection com fotos comprimidas ─────────── */
+  normalizarInspComFotos:async function(i){
+    var self=this;
+    /* Garante que as fotos do IDB estejam carregadas na memória */
+    await PhotoStore.loadForInsp(i).catch(function(){});
+    if(i.tipo==='subestacao'||i.sub)
+      await PhotoStore.loadSubAll(i.id,i.sub||{}).catch(function(){});
+
     var payloadLimpo=JSON.parse(JSON.stringify(i));
-    /* Remove fotos de itens normais */
+
+    /* Comprime fotos de itens normais */
+    var itPromises=[];
+    Object.keys(payloadLimpo.itens||{}).forEach(function(k){
+      var fotos=payloadLimpo.itens[k].fotos||[];
+      if(!fotos.length)return;
+      var p=Promise.all(fotos.map(function(f){
+        if(!f||!f.b64)return Promise.resolve(f);
+        return self.comprimirFotoSync(f.b64,480,0.45).then(function(b64c){
+          return {b64:b64c,leg:f.leg||''};
+        });
+      })).then(function(comprimidas){
+        payloadLimpo.itens[k].fotos=comprimidas;
+      });
+      itPromises.push(p);
+    });
+    await Promise.all(itPromises);
+
+    /* Comprime fotos de subestação */
+    var sub=payloadLimpo.sub;
+    if(sub){
+      var subP=[];
+      var _compFArr=function(arr){
+        if(!arr||!arr.length)return Promise.resolve(arr||[]);
+        return Promise.all(arr.map(function(f){
+          if(!f||!f.b64)return Promise.resolve(f);
+          return self.comprimirFotoSync(f.b64,480,0.45).then(function(b){return{b64:b,leg:f.leg||''};});
+        }));
+      };
+      if(sub.chk)Object.keys(sub.chk).forEach(function(k){
+        if(!sub.chk[k])return;
+        subP.push(_compFArr(sub.chk[k].fotos||[]).then(function(c){sub.chk[k].fotos=c;}));
+      });
+      if(Array.isArray(sub.trafos))sub.trafos.forEach(function(t){
+        subP.push(_compFArr(t.fotos_ttr||[]).then(function(c){t.fotos_ttr=c;}));
+        subP.push(_compFArr(t.fotos_iso||[]).then(function(c){t.fotos_iso=c;}));
+        subP.push(_compFArr(t.fotos_ohm||[]).then(function(c){t.fotos_ohm=c;}));
+      });
+      if(Array.isArray(sub.disjs))sub.disjs.forEach(function(d){
+        subP.push(_compFArr(d.fotos_iso||[]).then(function(c){d.fotos_iso=c;}));
+        subP.push(_compFArr(d.fotos_cr||[]).then(function(c){d.fotos_cr=c;}));
+      });
+      if(Array.isArray(sub.secc))sub.secc.forEach(function(s){
+        subP.push(_compFArr(s.fotos_iso||[]).then(function(c){s.fotos_iso=c;}));
+        subP.push(_compFArr(s.fotos_cr||[]).then(function(c){s.fotos_cr=c;}));
+      });
+      await Promise.all(subP);
+    }
+
+    return {
+      id:i.id,
+      tipo:i.tipo||'',
+      comarca:i.com||'',
+      edificacao:i.edif||'',
+      regiao:i.reg||'',
+      fiscal:i.fiscal||'',
+      _fotosSync:true, /* marca que este payload tem thumbs */
+      payload:payloadLimpo,
+      updated_at:new Date().toISOString()
+    };
+  },
+  normalizeInspection:function(i){
+    /* Versão síncrona (fallback/legado) — sem fotos */
+    var payloadLimpo=JSON.parse(JSON.stringify(i));
     Object.keys(payloadLimpo.itens||{}).forEach(function(k){
       if(payloadLimpo.itens[k].fotos)payloadLimpo.itens[k].fotos=[];
     });
-    /* Remove fotos de subestações (sub) — chk, trafos, disjs, secc */
     var sub=payloadLimpo.sub;
     if(sub){
       if(sub.chk)Object.keys(sub.chk).forEach(function(k){if(sub.chk[k])sub.chk[k].fotos=[];});
@@ -1423,22 +1518,45 @@ var Sync={
         var localTs=local&&Date.parse(local.updated_at||local.dt||0)||0;
         var remoteTs=Date.parse(remote.updated_at||row.updated_at||0)||0;
         if(!local){
-          /* Nova inspecao vinda do Supabase: fotos ficam no IndexedDB daquele dispositivo */
+          /* Nova inspeção vinda do Supabase: salva thumbs do payload no IDB local */
+          if(remote._fotosSync){
+            Object.keys(remote.itens||{}).forEach(function(k){
+              var fotos=remote.itens[k].fotos||[];
+              if(fotos.length)PhotoStore.put(remote.id+'::'+k,fotos);
+            });
+            /* Thumbs de subestação */
+            if(remote.sub){
+              PhotoStore.putSubAll(remote.id,remote.sub).catch(function(){});
+            }
+          }
           S.insp.unshift(remote);
         }else if(remoteTs>=localTs){
-          /* Preserva fotos locais — agora garantidamente carregadas do IDB acima */
+          /* Preserva fotos locais (alta res) — carregadas do IDB acima */
           var _fotosLocais={};
           Object.keys(local.itens||{}).forEach(function(k){
             if((local.itens[k].fotos||[]).length)_fotosLocais[k]=local.itens[k].fotos;
           });
+          /* Se remoto traz thumbs novas e local não tem fotos: absorve */
+          var _fotosRemotasParaIDB={};
+          if(remote._fotosSync){
+            Object.keys(remote.itens||{}).forEach(function(k){
+              var rf=remote.itens[k]&&remote.itens[k].fotos||[];
+              if(rf.length&&!_fotosLocais[k])_fotosRemotasParaIDB[k]=rf;
+            });
+          }
           Object.keys(remote).forEach(function(k){local[k]=remote[k];});
-          /* Restaura fotos no objeto mesclado */
+          /* Restaura fotos locais (têm prioridade sobre thumbs) */
           Object.keys(_fotosLocais).forEach(function(k){
             if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosLocais[k];
           });
-          /* Re-persiste fotos no IDB para garantir consistencia */
+          /* Re-persiste fotos locais no IDB */
           Object.keys(_fotosLocais).forEach(function(k){
             PhotoStore.put(local.id+'::'+k,_fotosLocais[k]);
+          });
+          /* Persiste thumbs remotas quando local não tinha fotos */
+          Object.keys(_fotosRemotasParaIDB).forEach(function(k){
+            if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosRemotasParaIDB[k];
+            PhotoStore.put(local.id+'::'+k,_fotosRemotasParaIDB[k]);
           });
         }
       });
@@ -1532,7 +1650,9 @@ var Sync={
     /* ── Via Edge Function (preferencial: service_role, sem timeout PostgREST) ── */
     if(this.useEdge){
       if(!toSync.length&&!_idsParaDel.length)return;
-      var rows=toSync.map(this.normalizeInspection.bind(this));
+      /* Comprime fotos antes de enviar (thumbs 480px/0.45q ~15-25 KB cada) */
+      Tt('\u2601\ufe0f Sync: comprimindo fotos...');
+      var rows=await Promise.all(toSync.map(this.normalizarInspComFotos.bind(this)));
       var resp=await fetch(EDGE_SYNC_URL+'/push',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -1563,7 +1683,7 @@ var Sync={
     var UPSERT_LOTE=5;
     for(var off=0;off<toSync.length;off+=UPSERT_LOTE){
       var lote=toSync.slice(off,off+UPSERT_LOTE);
-      var rows=lote.map(this.normalizeInspection.bind(this));
+      var rows=await Promise.all(lote.map(this.normalizarInspComFotos.bind(this)));
       var rpc=await SB.rpc('upsert_inspections',{rows:rows});
       if(rpc.error)throw rpc.error;
       if(rpc.data&&rpc.data.ok===false)throw new Error(rpc.data.error||'upsert_inspections falhou');
