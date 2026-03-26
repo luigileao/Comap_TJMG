@@ -1307,12 +1307,31 @@ var Sync={
       var d=JSON.parse(raw)||{};
       this.deletedInsps=Array.isArray(d.deletedInsps)?d.deletedInsps:[];
       this.deletedUsers=Array.isArray(d.deletedUsers)?d.deletedUsers:[];
+      /* Migração: converte entradas antigas (string pura) para {id,_t} */
+      this.deletedInsps=this.deletedInsps.map(function(e){
+        return (typeof e==='string')?{id:e,_t:Date.now()}:e;
+      });
     }catch(e){}
   },
   saveState:function(){
+    /* Prune blacklist: mantém entradas dos últimos 30 dias (proteção contra ressurreição) */
+    var _30d=Date.now()-30*24*60*60*1000;
+    this.deletedInsps=this.deletedInsps.filter(function(e){
+      /* suporte a formato antigo (string pura) e novo ({id,_t}) */
+      if(typeof e==='string')return true; /* manter formato antigo até substituir */
+      return e&&e._t&&e._t>_30d;
+    });
+    /* Limite absoluto de segurança: 500 entradas */
+    if(this.deletedInsps.length>500)this.deletedInsps=this.deletedInsps.slice(-500);
     try{localStorage.setItem(this.stateKey,JSON.stringify({deletedInsps:this.deletedInsps,deletedUsers:this.deletedUsers}));}catch(e){}
   },
-  queueDeleteInspection:function(id){if(!id)return; if(this.deletedInsps.indexOf(id)===-1)this.deletedInsps.push(id); this.saveState(); this.schedulePush(50);},
+  queueDeleteInspection:function(id){
+    if(!id)return;
+    /* Armazena como {id, _t} para permitir pruning por tempo */
+    var _jaExiste=this.deletedInsps.some(function(e){return e===id||(e&&e.id===id);});
+    if(!_jaExiste)this.deletedInsps.push({id:id,_t:Date.now()});
+    this.saveState();this.schedulePush(50);
+  },
   queueDeleteUser:function(id){if(!id)return; if(this.deletedUsers.indexOf(id)===-1)this.deletedUsers.push(id); this.saveState(); this.schedulePush(50);},
   schedulePush:function(delay){
     var self=this;
@@ -1359,7 +1378,8 @@ var Sync={
     S.insp.forEach(function(i){localById[i.id]=i;});
     rows.forEach(function(row){
       if(!row||!row.id||!row.payload)return;
-      if(deleted.indexOf(row.id)!==-1)return;
+      /* Verifica blacklist no formato novo {id,_t} ou legado string */
+      if(deleted.some(function(e){return e===row.id||(e&&e.id===row.id);}))return;
       var remote=row.payload;
       remote.id=row.id;
       var local=localById[row.id];
@@ -1401,7 +1421,7 @@ var Sync={
       /* Busca por região: fiscal vê só sua região; admin/coord veem tudo */
       var _sess=S.sessao;
       var _isGlob=_sess&&(_sess.tipo==='admin'||_sess.tipo==='coordenador');
-      var _qInsp=SB.from('inspections').select('id,payload,updated_at').order('updated_at',{ascending:false});
+      var _qInsp=SB.from('inspections').select('id,payload,updated_at').order('updated_at',{ascending:false}).limit(500);
       if(!_isGlob&&_sess&&_sess.reg)_qInsp=_qInsp.eq('regiao',_sess.reg);
       var ir=await _qInsp;
       if(!ir.error&&Array.isArray(ir.data)){
@@ -1409,7 +1429,7 @@ var Sync={
         var remoteIds=ir.data.map(function(r){return r.id;});
         var _pendDel=Sync.deletedInsps||[];
         S.insp=S.insp.filter(function(i){
-          if(_pendDel.indexOf(i.id)!==-1)return false;
+          if(_pendDel.some(function(e){return e===i.id||(e&&e.id===i.id);}))return false;
           /* Mantém rascunho LOCAL (nunca subiu ao Supabase).
              Se o item JÁ estava no Supabase e foi deletado por qualquer
              usuário, remove localmente independente do status. */
@@ -1436,9 +1456,12 @@ var Sync={
     /* Deleta PRIMEIRO: garante que itens removidos por qualquer usuário
        não sejam re-publicados pelo upsert abaixo. */
     if(this.deletedInsps.length){
-      var dl=await SB.from('inspections').delete().in('id',this.deletedInsps);
+      var _idsParaDel=this.deletedInsps.map(function(e){return typeof e==='string'?e:e.id;});
+      var dl=await SB.from('inspections').delete().in('id',_idsParaDel);
       if(dl.error)throw dl.error;
-      this.deletedInsps=[];this.saveState();
+      /* NÃO zeramos deletedInsps — a lista funciona como blacklist permanente.
+         Garante que inspeções deletadas nunca ressuscitem via sync de outro dispositivo. */
+      this.saveState();
     }
     if(S.insp.length){
       var payload=S.insp.map(this.normalizeInspection.bind(this));
@@ -1470,6 +1493,7 @@ function computeDraftHash(){
 }
 function saveRascunhoAuto(force){
   if(!F||!F.id)return false;
+  if(!S.sessao)return false; /* sessão expirada: não salva/sincroniza */
   if(!force&&activeScreenId()!=='s-form')return false;
   try{
     normalizeFormState(F);
@@ -1581,7 +1605,47 @@ var PhotoStore=(function(){
   function delInsp(inspId,itemKeys){
     return Promise.all((itemKeys||[]).map(function(k){return del(inspId+'::'+k);}));
   }
-  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp};
+  /* ── Subestação: armazena todas as fotos do sub em uma entrada compacta ── */
+  /* chave: inspId::sub → valor: {chk:{id:[fotos]}, trafos:[[ft,fi,fo],...], disjs:[[fi,fc],...], secc:[[fi,fc],...]} */
+  function putSubAll(inspId,sub){
+    if(!sub)return Promise.resolve();
+    var fotos={chk:{},trafos:[],disjs:[],secc:[]};
+    Object.keys(sub.chk||{}).forEach(function(id){
+      var f=sub.chk[id].fotos;if(f&&f.length)fotos.chk[id]=f;
+    });
+    (sub.trafos||[]).forEach(function(t){
+      fotos.trafos.push({ttr:t.fotos_ttr||[],iso:t.fotos_iso||[],ohm:t.fotos_ohm||[]});
+    });
+    (sub.disjs||[]).forEach(function(d){
+      fotos.disjs.push({iso:d.fotos_iso||[],cr:d.fotos_cr||[]});
+    });
+    (sub.secc||[]).forEach(function(s){
+      fotos.secc.push({iso:s.fotos_iso||[],cr:s.fotos_cr||[]});
+    });
+    return put(inspId+'::sub',fotos);
+  }
+  function loadSubAll(inspId,sub){
+    if(!sub)return Promise.resolve();
+    return get(inspId+'::sub').then(function(fotos){
+      if(!fotos)return;
+      Object.keys(fotos.chk||{}).forEach(function(id){
+        if(sub.chk&&sub.chk[id])sub.chk[id].fotos=fotos.chk[id];
+      });
+      (fotos.trafos||[]).forEach(function(ft,i){
+        var t=sub.trafos&&sub.trafos[i];if(!t)return;
+        t.fotos_ttr=ft.ttr||[];t.fotos_iso=ft.iso||[];t.fotos_ohm=ft.ohm||[];
+      });
+      (fotos.disjs||[]).forEach(function(fd,i){
+        var d=sub.disjs&&sub.disjs[i];if(!d)return;
+        d.fotos_iso=fd.iso||[];d.fotos_cr=fd.cr||[];
+      });
+      (fotos.secc||[]).forEach(function(fs,i){
+        var s=sub.secc&&sub.secc[i];if(!s)return;
+        s.fotos_iso=fs.iso||[];s.fotos_cr=fs.cr||[];
+      });
+    }).catch(function(){});
+  }
+  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp,putSubAll:putSubAll,loadSubAll:loadSubAll};
 })();
 
 var DB={
@@ -1600,6 +1664,17 @@ var DB={
           });
           return clone;
         });
+        /* Também move fotos de Subestação para o IndexedDB */
+        inspSemFotos.forEach(function(clone,idx){
+          var orig=S.insp[idx];
+          if(!clone.sub)return;
+          /* Remove fotos do sub no clone (localStorage) */
+          PhotoStore.putSubAll(clone.id,orig.sub||{});
+          if(clone.sub.chk)Object.keys(clone.sub.chk).forEach(function(k){clone.sub.chk[k].fotos=[];});
+          if(clone.sub.trafos)clone.sub.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
+          if(clone.sub.disjs)clone.sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
+          if(clone.sub.secc)clone.sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
+        });
         localStorage.setItem('ti',JSON.stringify(inspSemFotos));
         if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
         localStorage.setItem('tu',JSON.stringify(US));
@@ -1617,7 +1692,11 @@ var DB={
   ld:function(){try{var i=localStorage.getItem('ti');if(i){S.insp=JSON.parse(i);
     var _temAntigas=S.insp.some(function(insp){return Object.keys(insp.itens||{}).some(function(k){return(insp.itens[k].fotos||[]).length>0;});});
     if(_temAntigas){PhotoStore.migrate(S.insp).then(function(){DB.svLocal();console.log('[PhotoStore] Migracao concluida.');});}
-    Promise.all(S.insp.map(function(insp){return PhotoStore.loadForInsp(insp);})).catch(function(){});}
+    Promise.all(S.insp.map(function(insp){
+      return PhotoStore.loadForInsp(insp).then(function(){
+        if(insp.sub)return PhotoStore.loadSubAll(insp.id,insp.sub);
+      });
+    })).catch(function(){});}
     var s=localStorage.getItem('ts');if(s){var d=JSON.parse(s);if(Date.now()-(d._t||0)<28800000)S.sessao=d;else localStorage.removeItem('ts');}
     var u=localStorage.getItem('tu');if(u){var ul=JSON.parse(u);if(ul&&ul.length){US.splice(0,US.length);ul.forEach(function(x){US.push(x);})}}
     var _defaultUS=[
@@ -1665,7 +1744,8 @@ function canDelInsp(i){
   if(!s)return false;
   if(s.tipo==='coordenador')return false;
   if(s.tipo==='admin')return !!(i&&i.st==='finalizada');
-  return true;
+  /* fiscal: só pode deletar inspeções da própria região */
+  return !!(i&&(!i.reg||i.reg===s.reg));
 }
 // Filtra uma lista de inspeções pelo acesso da sessão atual.
 // Admin/coordenador vêem tudo; usuário vê apenas da própria região (reg obrigatório).
@@ -1910,7 +1990,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v52 - IndexedDB fotos, fix Supabase payload, export com fotos
+// TJMG Fiscal PWA v54 - fotos sub IndexedDB, Drive auto, progresso fotos, blacklist 30d, pull limit
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
@@ -2717,7 +2797,28 @@ function renderItemPhotos(){
 
 function addItemPhoto(inp){
   if(!inp.files||!inp.files.length)return;
-  var files=Array.from(inp.files);var done=0;
+  var files=Array.from(inp.files);var done=0;var total=files.length;
+  /* Barra de progresso — cria/atualiza elemento fixo no topo do modal */
+  var _barId='_foto_prog_bar';
+  var _bar=el(_barId);
+  if(!_bar){
+    _bar=document.createElement('div');
+    _bar.id=_barId;
+    _bar.style.cssText='position:fixed;top:0;left:0;height:4px;background:#003580;transition:width .2s;z-index:9999;width:0;';
+    document.body.appendChild(_bar);
+  }
+  _bar.style.width='0';_bar.style.display='block';
+  function _atualizarBar(){
+    done++;
+    var pct=Math.round(done/total*100);
+    _bar.style.width=pct+'%';
+    if(done===total){
+      renderItemPhotos();
+      setTimeout(function(){_bar.style.display='none';},600);
+      Tt('✅ '+total+' foto(s) processada(s)!');
+    }
+  }
+  Tt(total+' foto(s) sendo processada(s)...');
   files.forEach(function(f){
     var r=new FileReader();
     r.onload=function(e){
@@ -2726,17 +2827,17 @@ function addItemPhoto(inp){
         var MAX=900;var w=img.width,h=img.height;
         if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
         if(h>MAX*1.5){w=Math.round(w*MAX*1.5/h);h=Math.round(MAX*1.5);}
-        var c=document.createElement('canvas');c.width=w;c.height=h;
-        var ctx=c.getContext('2d');ctx.drawImage(img,0,0,w,h);
-        var b64=c.toDataURL('image/jpeg',0.72);
+        var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        var ctx=cv.getContext('2d');ctx.drawImage(img,0,0,w,h);
+        var b64=cv.toDataURL('image/jpeg',0.72);
         _ifotos.push({id:uid(),b64:b64,leg:''});
-        done++;if(done===files.length)renderItemPhotos();
+        _atualizarBar();
       };
       img.src=e.target.result;
     };
     r.readAsDataURL(f);
   });
-  inp.value='';Tt(files.length+' foto(s) sendo processada(s)...');
+  inp.value='';
 }
 
 function renderItemMats(){
@@ -2870,7 +2971,30 @@ function saveItem(){
     DB.sv();cm('m-item');Tt('Item salvo ✓');openDet(_eid);
   }
 }
-function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function(){var i=S.insp.find(function(x){return x.id===id;});if(i){i.st='finalizada';i.updated_at=new Date().toISOString();if(!i.protocolo)i.protocolo=gerarProtocolo(i);DB.sv();}var _prot=i&&i.protocolo?i.protocolo:'';el('st').textContent='Relatório Finalizado!';el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');G('s-suc');});}
+function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function(){
+  var i=S.insp.find(function(x){return x.id===id;});
+  if(i){i.st='finalizada';i.updated_at=new Date().toISOString();if(!i.protocolo)i.protocolo=gerarProtocolo(i);DB.sv();}
+  var _prot=i&&i.protocolo?i.protocolo:'';
+  el('st').textContent='Relatório Finalizado!';
+  el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');
+  G('s-suc');
+  /* ── Envia para Drive em background após finalizar ── */
+  if(DRIVE_SCRIPT_URL&&i){
+    setTimeout(function(){
+      if(i.tipo==='subestacao'){
+        PhotoStore.loadSubAll(i.id,i.sub||{}).then(function(){
+          var _htmlSub=_gerarHTMLSubStr(i);
+          if(_htmlSub)enviarParaDrive(i,_htmlSub);
+        }).catch(function(){});
+      }else{
+        PhotoStore.loadForInsp(i).then(function(){
+          var _htmlStr=_gerarHTMLStr(i);
+          if(_htmlStr)enviarParaDrive(i,_htmlStr);
+        }).catch(function(){});
+      }
+    },800);
+  }
+});}
 
 /* ── Funções globais de protocolo ── */
 function normProt(s){return(s||'').toUpperCase().replace(/[ÀÁÂÃÄ]/g,'A').replace(/[ÈÉÊË]/g,'E').replace(/[ÌÍÎÏ]/g,'I').replace(/[ÒÓÔÕÖ]/g,'O').replace(/[ÙÚÛÜ]/g,'U').replace(/Ç/g,'C').replace(/Ã/g,'A').replace(/Õ/g,'O').replace(/Â/g,'A').replace(/Ê/g,'E').replace(/Ô/g,'O').replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
@@ -2940,9 +3064,9 @@ function exportHTML(id){
   }
   _doExportHTML(id);
 }
-function _doExportHTML(id){
-  var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
-  if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
+function _gerarHTMLStr(id){
+  var i=S.insp.find(function(x){return x.id===id;});if(!i)return null;
+  if(i.tipo==='subestacao')return null;
   var t=TIPOS[i.tipo]||TIPOS.periodica;
   var _osp=i.tipo==='ose'||i.tipo==='programada'||i.tipo==='osp';
   /* Para OSE/Programada filtra só as atividades selecionadas */
@@ -3355,14 +3479,21 @@ function _doExportHTML(id){
     +'}'
     +'<\/script>'
     +'</body></html>';
+  return html;
+}
+/* Abre janela de download + envia ao Drive */
+function _doExportHTML(id){
+  var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
+  if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
+  var html=_gerarHTMLStr(id);
+  if(!html)return;
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
   a.click();
-  Tt('\u2705 Relat\u00f3rio exportado com sucesso!');
-  // ── Envia para o Google Drive em background ────────────────────────────────
-  enviarParaDrive(i, html);
+  Tt('\u2705 Relatório exportado com sucesso!');
+  enviarParaDrive(i,html);
 }
 
 /* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
@@ -3525,7 +3656,7 @@ function rAdm(){
     ab.innerHTML=ph;
   }
   else{
-  var _cfgH='<div class="card" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:800;margin-bottom:12px;">&#9881; Sistema — TJMG Fiscal v52</div>';
+  var _cfgH='<div class="card" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:800;margin-bottom:12px;">&#9881; Sistema — TJMG Fiscal v53</div>';
   var _tot=S.insp.length,_fin=S.insp.filter(function(i){return i.st==='finalizada';}).length,_rasc=_tot-_fin;
   _cfgH+='<div style="display:flex;gap:8px;margin-bottom:12px;">';
   _cfgH+='<div class="stat" style="border-color:#16a34a;"><div style="font-size:18px;font-weight:900;color:#16a34a;">'+_fin+'</div><div style="font-size:9px;color:#64748b;">Finalizados</div></div>';
@@ -5775,6 +5906,16 @@ function subRenderSecc(sc,idx){
 // ── Export HTML ───────────────────────────────────────────────────────────────
 function exportHTMLSub(id){
   var insp=S.insp.find(function(x){return x.id===id;});if(!insp)return;
+  /* Carrega fotos do IndexedDB antes de gerar */
+  if(insp.sub){
+    Tt('Carregando fotos...');
+    PhotoStore.loadSubAll(id,insp.sub).then(function(){_doExportHTMLSub(id);}).catch(function(){_doExportHTMLSub(id);});
+    return;
+  }
+  _doExportHTMLSub(id);
+}
+function _gerarHTMLSubStr(id){
+  var insp=S.insp.find(function(x){return x.id===id;});if(!insp)return null;
   var sub=insp.sub||{};var d=insp.d||{};
   var tipoSub=sub.tipo_sub||d.tipo_sub||'AEREA';
   var tipoMan=sub.tipo_manutencao||d.tipo_manutencao||'ANUAL';
@@ -5892,12 +6033,19 @@ function exportHTMLSub(id){
   html+='<div style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:8px;font-size:9px;color:#94a3b8;text-align:center;">Emitido: '+new Date().toLocaleString('pt-BR')+' | TJMG Fiscal v2 | Prazo: 10 dias úteis após execução</div>';
   html+='</body></html>';
 
+  return html;
+}
+function _doExportHTMLSub(id){
+  var insp=S.insp.find(function(x){return x.id===id;});if(!insp)return;
+  var html=_gerarHTMLSubStr(id);if(!html)return;
+  var tipoSub=(insp.sub||{}).tipo_sub||'AEREA';
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='Sub_'+tipoSub+'_'+(insp.com||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+fdt(insp.data||Date.now()).replace(/\//g,'-')+'.html';
   a.click();URL.revokeObjectURL(a.href);
   Tt('HTML exportado!');
+  enviarParaDrive(insp,html);
 }
 
 function rFConc(c){
