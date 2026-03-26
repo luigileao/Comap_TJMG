@@ -1281,6 +1281,8 @@ var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestr
 var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
+/* ── Edge Function (v57) — substitui chamadas diretas ao SDK quando disponível ── */
+var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync';
 // ── Google Drive (Apps Script) ─────────────────────────────────────────────
 // Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
 var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
@@ -1294,12 +1296,16 @@ var Sync={
   stateKey:'tjmg_sync_state_v1',
   init:function(){
     try{
-      if(!window.supabase||!SUPABASE_URL||!(SUPABASE_PUBLISHABLE_KEY||SUPABASE_ANON_KEY))return false;
-      SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY||SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
-      this.ready=!!SB;
+      /* Tenta inicializar o SDK como fallback */
+      if(window.supabase&&SUPABASE_URL&&(SUPABASE_PUBLISHABLE_KEY||SUPABASE_ANON_KEY)){
+        SB=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY||SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+      }
+      /* Edge Function tem prioridade: não depende do PostgREST, sem CORS overhead */
+      this.useEdge=!!(typeof EDGE_SYNC_URL!=='undefined'&&EDGE_SYNC_URL);
+      this.ready=this.useEdge||!!SB;
       this.loadState();
       return this.ready;
-    }catch(e){console.warn('Supabase init falhou',e);return false;}
+    }catch(e){console.warn('Sync init falhou',e);return false;}
   },
   loadState:function(){
     try{
@@ -1447,19 +1453,42 @@ var Sync={
     if(!this.ready||!navigator.onLine)return;
     if(!S.sessao)return;
     try{
-      /* Envia deleções pendentes ANTES de buscar, para evitar que
-         itens deletados neste dispositivo voltem via merge.
-         Usa pushUsers somente (leve) para não acionar o pushInspections pesado no boot */
+      /* Envia deleções pendentes ANTES de buscar */
       if((this.deletedInsps.length||this.deletedUsers.length)&&!this.busy){
         try{await this.pushUsers();}catch(e){console.warn('pre-pull push falhou',e);}
       }
+      var _sess=S.sessao;
+      var _isGlob=_sess&&(_sess.tipo==='admin'||_sess.tipo==='coordenador');
+      var _reg=(!_isGlob&&_sess&&_sess.reg)?_sess.reg:null;
+
+      /* ── Via Edge Function (preferencial: sem overhead PostgREST, sem CORS issue) ── */
+      if(this.useEdge){
+        var edgeUrl=EDGE_SYNC_URL+'/pull'+(_reg?'?reg='+encodeURIComponent(_reg):'');
+        var resp=await fetch(edgeUrl,{method:'GET',headers:{'Content-Type':'application/json'}});
+        if(!resp.ok)throw new Error('Edge pull HTTP '+resp.status);
+        var d=await resp.json();
+        if(!d.ok)throw new Error(d.error||'Edge pull erro');
+        if(Array.isArray(d.users)&&d.users.length)this.mergeRemoteUsers(d.users);
+        if(Array.isArray(d.inspections)){
+          this.mergeRemoteInspections(d.inspections);
+          var remoteIds=d.inspections.map(function(r){return r.id;});
+          var _pendDel=Sync.deletedInsps||[];
+          S.insp=S.insp.filter(function(i){
+            if(_pendDel.some(function(e){return e===i.id||(e&&e.id===i.id);}))return false;
+            if(i.st==='em_andamento'&&remoteIds.indexOf(i.id)===-1)return true;
+            return remoteIds.indexOf(i.id)!==-1;
+          });
+        }
+        DB.svLocal();
+        return;
+      }
+
+      /* ── Fallback SDK direto ── */
       var ur=await SB.from('app_users').select('*').order('nome');
       if(!ur.error&&Array.isArray(ur.data)&&ur.data.length)this.mergeRemoteUsers(ur.data);
       /* Busca por região: fiscal vê só sua região; admin/coord veem tudo */
-      var _sess=S.sessao;
-      var _isGlob=_sess&&(_sess.tipo==='admin'||_sess.tipo==='coordenador');
       var _qInsp=SB.from('inspections').select('id,payload,updated_at').order('updated_at',{ascending:false}).limit(500);
-      if(!_isGlob&&_sess&&_sess.reg)_qInsp=_qInsp.eq('regiao',_sess.reg);
+      if(_reg)_qInsp=_qInsp.eq('regiao',_reg);
       var ir=await _qInsp;
       if(!ir.error&&Array.isArray(ir.data)){
         this.mergeRemoteInspections(ir.data);
@@ -1475,9 +1504,11 @@ var Sync={
         });
       }
       DB.svLocal();
-    }catch(e){console.warn('Pull Supabase falhou',e);}
+    }catch(e){console.warn('Pull falhou',e);}
   },
   pushUsers:async function(){
+    /* Usuários são leves e não disparam trigger pesada — usa SDK direto */
+    if(!SB)return;
     var payload=US.map(this.normalizeUser.bind(this));
     if(payload.length){
       var up=await SB.from('app_users').upsert(payload,{onConflict:'id'});
@@ -1490,36 +1521,45 @@ var Sync={
     }
   },
   pushInspections:async function(){
-    /* Deleta PRIMEIRO: garante que itens removidos por qualquer usuário
-       não sejam re-publicados pelo upsert abaixo. */
+    var _idsParaDel=this.deletedInsps.map(function(e){return typeof e==='string'?e:e.id;});
+    var cutoff=new Date(Date.now()-48*3600*1000).toISOString();
+    var toSync=S.insp.filter(function(i){
+      if(i.st==='em_andamento')return true;
+      if(!i.updated_at)return true;
+      return i.updated_at>=cutoff;
+    });
+
+    /* ── Via Edge Function (preferencial: service_role, sem timeout PostgREST) ── */
+    if(this.useEdge){
+      if(!toSync.length&&!_idsParaDel.length)return;
+      var rows=toSync.map(this.normalizeInspection.bind(this));
+      var resp=await fetch(EDGE_SYNC_URL+'/push',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({inspections:rows,deleteInsps:_idsParaDel,users:[],deleteUsers:[]})
+      });
+      if(!resp.ok)throw new Error('Edge push HTTP '+resp.status);
+      var d=await resp.json();
+      if(!d.ok)throw new Error(d.error||'Edge push erro');
+      this.saveState();
+      return;
+    }
+
+    /* ── Fallback SDK direto ── */
+    /* Deleta PRIMEIRO: garante que itens removidos não sejam re-publicados */
     if(this.deletedInsps.length){
-      var _idsParaDel=this.deletedInsps.map(function(e){return typeof e==='string'?e:e.id;});
-      /* Lotes de 50 para o delete (IDs são curtos, sem problema de timeout) */
+      /* Lotes de 50 para o delete */
       var DEL_LOTE=50;
       for(var di=0;di<_idsParaDel.length;di+=DEL_LOTE){
         var dlLote=_idsParaDel.slice(di,di+DEL_LOTE);
         var dl=await SB.from('inspections').delete().in('id',dlLote);
         if(dl.error)throw dl.error;
       }
-      /* NÃO zeramos deletedInsps — a lista funciona como blacklist permanente.
-         Garante que inspeções deletadas nunca ressuscitem via sync de outro dispositivo. */
+      /* NÃO zeramos deletedInsps — blacklist permanente contra ressurreição */
       this.saveState();
     }
-    if(!S.insp.length)return;
-    /* Filtra o que realmente precisa subir:
-       - rascunhos (em_andamento): sempre sincroniza
-       - finalizadas recentes (últimas 48h): garante propagação imediata
-       - finalizadas antigas: o Supabase já tem; evita re-push desnecessário */
-    var cutoff=new Date(Date.now()-48*3600*1000).toISOString();
-    var toSync=S.insp.filter(function(i){
-      if(i.st==='em_andamento')return true;
-      if(!i.updated_at)return true;            /* sem timestamp: assume novo */
-      return i.updated_at>=cutoff;
-    });
     if(!toSync.length)return;
-    /* Usa RPC upsert_inspections que executa com statement_timeout=0
-       (SET LOCAL na função PL/pgSQL), contornando o limite do plano free.
-       Lotes de 5: seguro pois o timeout não se aplica mais. */
+    /* Usa RPC upsert_inspections com statement_timeout=0, lotes de 5 */
     var UPSERT_LOTE=5;
     for(var off=0;off<toSync.length;off+=UPSERT_LOTE){
       var lote=toSync.slice(off,off+UPSERT_LOTE);
@@ -3153,8 +3193,22 @@ function gerarTipoLbl(tipo){
 }
 
 async function uploadHtmlToSupabase(fileName, htmlText, inspId){
-  if(!Sync.ready||!navigator.onLine||!SB)return null;
+  if(!Sync.ready||!navigator.onLine)return null;
   try{
+    /* ── Via Edge Function ── */
+    if(Sync.useEdge){
+      var resp=await fetch(EDGE_SYNC_URL+'/upload-report',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({fileName:fileName,htmlText:htmlText,inspId:inspId})
+      });
+      if(!resp.ok)throw new Error('Edge upload HTTP '+resp.status);
+      var d=await resp.json();
+      if(!d.ok)throw new Error(d.error||'Edge upload erro');
+      return d.path;
+    }
+    /* ── Fallback SDK ── */
+    if(!SB)return null;
     var path='relatorios/'+inspId+'/'+fileName;
     var blob=new Blob([htmlText],{type:'text/html;charset=utf-8'});
     var up=await SB.storage.from('relatorios').upload(path,blob,{upsert:true,contentType:'text/html;charset=utf-8'});
