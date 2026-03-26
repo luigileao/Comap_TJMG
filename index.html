@@ -1371,6 +1371,7 @@ var Sync={
   },
   pullAll:async function(){
     if(!this.ready||!navigator.onLine)return;
+    if(!S.sessao)return;
     try{
       /* Envia deleções pendentes ANTES de buscar, para evitar que
          itens deletados neste dispositivo voltem via merge */
@@ -1493,7 +1494,7 @@ var DB={
   },
   sv:function(){
     this.svLocal();
-    S.insp.forEach(function(i){if(i)i.updated_at=new Date().toISOString();});
+    /* updated_at marcado individualmente em cada operação */
     Sync.schedulePush(600);
   },
   ld:function(){try{var i=localStorage.getItem('ti');if(i)S.insp=JSON.parse(i);
@@ -1533,7 +1534,7 @@ function cf(ico,tit,msg,cb){el('ci').textContent=ico;el('ct').textContent=tit;el
 // Retorna true se o usuário logado tem acesso global (admin ou coordenador)
 function isGlobal(s){
   s=s||S.sessao;
-  return !s||s.tipo==='admin'||s.tipo==='coordenador';
+  return !!(s&&(s.tipo==='admin'||s.tipo==='coordenador'));
 }
 /* Regra de exclusão:
    - fiscal (usuario) : pode excluir qualquer inspeção da sua região
@@ -1682,7 +1683,7 @@ function rCoord(){
   var sub=el('coord-sub');
   if(sub)sub.textContent=S.insp.length+' relatório(s) no sistema';
   var tipos_keys=['todos'].concat(Object.keys(TIPOS));
-  var nl={todos:'Todos',periodica:'RITMP – Manutenção Periódica',ose:'RITE – Emergencial',programada:'RITP – Programada',osp:'OSP – Abertura',fachada:'Fachada',spda:'SPDA'};
+  var nl={todos:'Todos',periodica:'RITMP – Manutenção Periódica',ose:'RITE – Emergencial',programada:'RITP – Programada',osp:'OSP – Abertura',fachada:'Fachada',spda:'SPDA',prontuario:'Laudos',subestacao:'Subestação'};
   var fltEl=el('coord-flt');
   if(fltEl)fltEl.innerHTML=tipos_keys.map(function(f){
     var sel=S.rflt===f;
@@ -2027,7 +2028,7 @@ function _renderRelItemTable(lista,ss){
   rows.forEach(function(r){
     var hasFoto=r.item.fotos&&r.item.fotos.length;
     var hasObs=r.item.obs&&r.item.obs.trim();
-    h+='<div class="card" style="padding:10px 12px;cursor:pointer;border-left:4px solid '+stobj.c+';" onclick="openItem(\''+r.insp.id+'\',\''+r.k+'\')">'+
+    h+='<div class="card" style="padding:10px 12px;cursor:pointer;border-left:4px solid '+stobj.c+';" onclick="var _ci=S.insp.find(function(x){return x.id===\''+r.insp.id+'\';});if(!_ci||!_ci.itens||!_ci.itens[\''+r.k+'\']){Tt(\'Item não disponível\');rRel();return;}openItem(\''+r.insp.id+'\',\''+r.k+'\')">'+
       '<div style="display:flex;align-items:flex-start;gap:8px;">'+
       '<div style="flex:1;"><div style="font-size:12px;font-weight:700;color:#1e293b;line-height:1.3;">'+(r.item.nm||r.item.n||r.k)+'</div>'+
       '<div style="font-size:10px;color:#64748b;margin-top:3px;">'+r.insp.edif+' — '+r.insp.com+'</div>'+
@@ -2373,6 +2374,7 @@ function retomarF(id){
     try{
       F=JSON.parse(JSON.stringify(i.snap));
     }catch(e){F=i.snap;}
+    F._editando=false;
   }else{
     ensureDraftItems(i);
     F={tipo:i.tipo,et:0,id:i.id,ets:t.e,
@@ -2563,8 +2565,9 @@ function openDet(id){
     h+='<button class="btn bo" onclick="exportHTML(\''+id+'\')">Exportar HTML</button><div style="height:16px;"></div>';
   }
 
-  el('dbody').innerHTML=h;var dd=el('det-del');if(dd)dd.style.display=canDelInsp(i)?'':'none';
-  if(i.tipo==='prontuario'){el('dbody').innerHTML=renderDetPron(i);var dd2=el('det-del');if(dd2)dd2.style.display=canDelInsp(i)?'':'none';}
+  var _canDel=canDelInsp(i);
+  if(i.tipo==='prontuario'){el('dbody').innerHTML=renderDetPron(i);}else{el('dbody').innerHTML=h;}
+  var dd=el('det-del');if(dd)dd.style.display=_canDel?'':'none';
   G('s-det');
 }
 function delDet(){
@@ -2726,7 +2729,7 @@ function saveItem(){
     DB.sv();cm('m-item');Tt('Item salvo ✓');openDet(_eid);
   }
 }
-function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function(){var i=S.insp.find(function(x){return x.id===id;});if(i){i.st='finalizada';if(!i.protocolo)i.protocolo=gerarProtocolo(i);DB.sv();}var _prot=i&&i.protocolo?i.protocolo:'';el('st').textContent='Relatório Finalizado!';el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');G('s-suc');});}
+function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function(){var i=S.insp.find(function(x){return x.id===id;});if(i){i.st='finalizada';i.updated_at=new Date().toISOString();if(!i.protocolo)i.protocolo=gerarProtocolo(i);DB.sv();}var _prot=i&&i.protocolo?i.protocolo:'';el('st').textContent='Relatório Finalizado!';el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');G('s-suc');});}
 
 /* ── Funções globais de protocolo ── */
 function normProt(s){return(s||'').toUpperCase().replace(/[ÀÁÂÃÄ]/g,'A').replace(/[ÈÉÊË]/g,'E').replace(/[ÌÍÎÏ]/g,'I').replace(/[ÒÓÔÕÖ]/g,'O').replace(/[ÙÚÛÜ]/g,'U').replace(/Ç/g,'C').replace(/Ã/g,'A').replace(/Õ/g,'O').replace(/Â/g,'A').replace(/Ê/g,'E').replace(/Ô/g,'O').replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
@@ -5880,7 +5883,12 @@ function salvarEdicao(){
   salvarR();
   stopAutoSave();
   var i=S.insp.find(function(x){return x.id===F.id;});
-  if(i){i.st='finalizada';DB.sv();}
+  if(i){
+    i.st='finalizada';
+    i.updated_at=new Date().toISOString();
+    if(!i.protocolo)i.protocolo=gerarProtocolo(i);
+    DB.sv();
+  }
   F._editando=false;
   Tt('✅ Relatório atualizado com sucesso!');
   setTimeout(function(){openDet(F.id);},600);
