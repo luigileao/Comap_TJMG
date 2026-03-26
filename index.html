@@ -3592,7 +3592,7 @@ function _gerarHTMLStr(id){
     +'</body></html>';
   return html;
 }
-/* Abre janela de download + envia ao Drive */
+/* Abre janela de download + envia ao Drive + depois ao Supabase */
 function _doExportHTML(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
@@ -3601,14 +3601,21 @@ function _doExportHTML(id){
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
+  var nomeArq='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
+  a.download=nomeArq;
   a.click();
   Tt('\u2705 Relatório exportado com sucesso!');
-  enviarParaDrive(i,html);
+  enviarParaDrive(i,html,function(){
+    Tt('\u2601\ufe0f Supabase: enviando relatório...');
+    uploadHtmlToSupabase(nomeArq,html,i.id).then(function(path){
+      if(path)Tt('\u2705 Supabase: relatório salvo!');
+      else Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');
+    });
+  });
 }
 
 /* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
-function enviarParaDrive(insp, htmlStr){
+function enviarParaDrive(insp, htmlStr, onComplete){
   if(!DRIVE_SCRIPT_URL)return;
   try{
     var protocolo=insp.protocolo||gerarProtocolo(insp);
@@ -3677,6 +3684,7 @@ function enviarParaDrive(insp, htmlStr){
       });
       if(!fotos.length){
         Tt('\u2705 Drive: relatório salvo — '+protocolo);
+        if(typeof onComplete==='function')onComplete();
         return;
       }
       var FCHUNK=5000;
@@ -3697,6 +3705,7 @@ function enviarParaDrive(insp, htmlStr){
       function proximaFoto(){
         if(fi>=tarefas.length){
           Tt('\u2705 Drive: '+fotos.length+' foto(s) salva(s) — '+protocolo);
+          if(typeof onComplete==='function')onComplete();
           return;
         }
         var t=tarefas[fi];
@@ -6218,10 +6227,17 @@ function _doExportHTMLSub(id){
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='Sub_'+tipoSub+'_'+(insp.com||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+fdt(insp.data||Date.now()).replace(/\//g,'-')+'.html';
+  var nomeArq='Sub_'+tipoSub+'_'+(insp.com||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+fdt(insp.data||Date.now()).replace(/\//g,'-')+'.html';
+  a.download=nomeArq;
   a.click();URL.revokeObjectURL(a.href);
   Tt('HTML exportado!');
-  enviarParaDrive(insp,html);
+  enviarParaDrive(insp,html,function(){
+    Tt('\u2601\ufe0f Supabase: enviando relatório...');
+    uploadHtmlToSupabase(nomeArq,html,insp.id).then(function(path){
+      if(path)Tt('\u2705 Supabase: relatório salvo!');
+      else Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');
+    });
+  });
 }
 
 function rFConc(c){
