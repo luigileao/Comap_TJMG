@@ -1321,6 +1321,11 @@ var Sync={
     self.timer=setTimeout(function(){self.pushAll();},delay||800);
   },
   normalizeInspection:function(i){
+    /* Clona sem base64 de fotos para não estourar o payload do Supabase */
+    var payloadLimpo=JSON.parse(JSON.stringify(i));
+    Object.keys(payloadLimpo.itens||{}).forEach(function(k){
+      if(payloadLimpo.itens[k].fotos)payloadLimpo.itens[k].fotos=[];
+    });
     return {
       id:i.id,
       tipo:i.tipo||'',
@@ -1331,7 +1336,7 @@ var Sync={
       status:i.st||'',
       protocolo:i.protocolo||'',
       updated_at:new Date().toISOString(),
-      payload:JSON.parse(JSON.stringify(i))
+      payload:payloadLimpo
     };
   },
   normalizeUser:function(u){
@@ -1360,8 +1365,21 @@ var Sync={
       var local=localById[row.id];
       var localTs=local&&Date.parse(local.updated_at||local.dt||0)||0;
       var remoteTs=Date.parse(remote.updated_at||row.updated_at||0)||0;
-      if(!local){S.insp.unshift(remote);}
-      else if(remoteTs>=localTs){Object.keys(remote).forEach(function(k){local[k]=remote[k];});}
+      if(!local){
+        /* Nova inspeção vinda do Supabase: fotos ficam no IndexedDB daquele dispositivo */
+        S.insp.unshift(remote);
+      }else if(remoteTs>=localTs){
+        /* Preserva fotos locais (estão no IndexedDB): payload do Supabase não tem base64 */
+        var _fotosLocais={};
+        Object.keys(local.itens||{}).forEach(function(k){
+          if((local.itens[k].fotos||[]).length)_fotosLocais[k]=local.itens[k].fotos;
+        });
+        Object.keys(remote).forEach(function(k){local[k]=remote[k];});
+        /* Restaura fotos que estavam em memória */
+        Object.keys(_fotosLocais).forEach(function(k){
+          if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosLocais[k];
+        });
+      }
     });
   },
   mergeRemoteUsers:function(rows){
@@ -1892,7 +1910,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v37.1 - Base estável com correção de login e cache
+// TJMG Fiscal PWA v52 - IndexedDB fotos, fix Supabase payload, export com fotos
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
@@ -2913,6 +2931,18 @@ async function uploadHtmlToSupabase(fileName, htmlText, inspId){
 function exportHTML(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
+  /* Garante que fotos estejam carregadas do IndexedDB antes de gerar o HTML */
+  var _hasEmptyFotos=Object.keys(i.itens||{}).some(function(k){return!(i.itens[k].fotos||[]).length;});
+  if(_hasEmptyFotos){
+    Tt('Carregando fotos...');
+    PhotoStore.loadForInsp(i).then(function(){_doExportHTML(id);}).catch(function(){_doExportHTML(id);});
+    return;
+  }
+  _doExportHTML(id);
+}
+function _doExportHTML(id){
+  var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
+  if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
   var t=TIPOS[i.tipo]||TIPOS.periodica;
   var _osp=i.tipo==='ose'||i.tipo==='programada'||i.tipo==='osp';
   /* Para OSE/Programada filtra só as atividades selecionadas */
@@ -3495,7 +3525,7 @@ function rAdm(){
     ab.innerHTML=ph;
   }
   else{
-  var _cfgH='<div class="card" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:800;margin-bottom:12px;">&#9881; Sistema — TJMG Fiscal v41</div>';
+  var _cfgH='<div class="card" style="margin-bottom:8px;"><div style="font-size:13px;font-weight:800;margin-bottom:12px;">&#9881; Sistema — TJMG Fiscal v52</div>';
   var _tot=S.insp.length,_fin=S.insp.filter(function(i){return i.st==='finalizada';}).length,_rasc=_tot-_fin;
   _cfgH+='<div style="display:flex;gap:8px;margin-bottom:12px;">';
   _cfgH+='<div class="stat" style="border-color:#16a34a;"><div style="font-size:18px;font-weight:900;color:#16a34a;">'+_fin+'</div><div style="font-size:9px;color:#64748b;">Finalizados</div></div>';
