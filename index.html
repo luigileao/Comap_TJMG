@@ -2101,7 +2101,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v56 - fix QuotaExceededError (IDB fallback), fix Supabase timeout (push em lotes), toast storage simplificado
+// TJMG Fiscal PWA v57 - fix chunks URL (6000→1800 / 5000→1500), fix Drive 400 Bad Request
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
@@ -3629,7 +3629,7 @@ function enviarParaDrive(insp, htmlStr, onComplete){
     };
 
     /* ── Envia HTML em chunks via GET (contorna no-cors que descarta body em POST) ── */
-    var CHUNK=6000;
+    var CHUNK=1800;/* v57: reduzido de 6000→1800 para caber no limite de URL do Apps Script (~2KB com encodeURIComponent) */
     var htmlB64=btoa(unescape(encodeURIComponent(htmlStr)));
     var totalChunks=Math.ceil(htmlB64.length/CHUNK)||1;
 
@@ -3687,7 +3687,7 @@ function enviarParaDrive(insp, htmlStr, onComplete){
         if(typeof onComplete==='function')onComplete();
         return;
       }
-      var FCHUNK=5000;
+      var FCHUNK=1500;/* v57: reduzido de 5000→1500 para caber no limite de URL do Apps Script */
       var tarefas=[];
       fotos.forEach(function(f){
         var total=Math.ceil(f.b64.length/FCHUNK)||1;
