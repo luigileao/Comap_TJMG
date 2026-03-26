@@ -6765,8 +6765,12 @@ async function bootApp(){
 window.addEventListener('online',function(){updNet();if(Sync.ready)Sync.pullAll().then(function(){Sync.schedulePush(600);});});
 /* Quando app volta ao foco (aba/PWA reativada), re-sincroniza para
    capturar deleções feitas por outros usuários da mesma região */
+var _lastVisSync=0;
 window.addEventListener('visibilitychange',function(){
   if(!document.hidden&&Sync.ready&&navigator.onLine){
+    var _agora=Date.now();
+    if(_agora-_lastVisSync < 150000) return; // ignora se faz menos de 5min
+    _lastVisSync=_agora;
     Sync.pullAll().then(function(){Sync.schedulePush(800);});
   }
 });
