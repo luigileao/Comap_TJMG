@@ -1282,7 +1282,7 @@ var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 /* ── Edge Function (v57) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync';
+var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v58
 // ── Google Drive (Apps Script) ─────────────────────────────────────────────
 // Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
 var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
@@ -3682,13 +3682,30 @@ function enviarParaDrive(insp, htmlStr, onComplete){
       dataVistoria:fdt(insp.dtVistoria||insp.data)
     };
 
-    /* ── Envia HTML em chunks via GET (contorna no-cors que descarta body em POST) ── */
-    var CHUNK=1800;/* v57: reduzido de 6000→1800 para caber no limite de URL do Apps Script (~2KB com encodeURIComponent) */
+    /* ── Envia via GET com CORS real + retry (v58 corrigido) ──
+       Apps Script publicado como "Qualquer pessoa" já responde com
+       Access-Control-Allow-Origin:* por padrão — não precisa de no-cors.
+       Com CORS real o fetch lê o status HTTP: retry dispara tanto em
+       falha de rede quanto em erros 4xx/5xx do servidor. */
+    var CHUNK=1800;
     var htmlB64=btoa(unescape(encodeURIComponent(htmlStr)));
     var totalChunks=Math.ceil(htmlB64.length/CHUNK)||1;
+    var MAX_RETRY=3;
 
-    function _get(url){
-      return fetch(url,{method:'GET',mode:'no-cors'}).catch(function(e){console.warn('Drive GET erro:',e);});
+    function _getComRetry(url,tentativa){
+      tentativa=tentativa||1;
+      return fetch(url,{method:'GET'})
+        .then(function(r){
+          if(!r.ok)throw new Error('HTTP '+r.status);
+          return r.text();
+        })
+        .catch(function(e){
+          if(tentativa<MAX_RETRY){
+            return new Promise(function(res){setTimeout(res,600*tentativa);})
+              .then(function(){return _getComRetry(url,tentativa+1);});
+          }
+          console.warn('[Drive] chunk falhou após '+MAX_RETRY+' tentativas:',e);
+        });
     }
 
     function enviarChunk(idx){
@@ -3706,27 +3723,21 @@ function enviarParaDrive(insp, htmlStr, onComplete){
           +'&dataVistoria='+encodeURIComponent(meta.dataVistoria);
         Tt('\u2601\ufe0f Drive: salvando '+meta.edif+' ('+totalChunks+' partes)...');
       }
-      return _get(url);
+      return _getComRetry(url);
     }
 
-    /* Envia chunks em sequencia com delay para nao sobrecarregar o Apps Script */
     var ci=0;
     function proximoChunk(){
-      if(ci>=totalChunks){
-        /* Apos todo HTML, envia fotos individualmente em lotes de 5 */
-        enviarFotos();
-        return;
-      }
-      enviarChunk(ci).then(function(){
-        ci++;
-        setTimeout(proximoChunk,250);
-      });
+      if(ci>=totalChunks){enviarFotos();return;}
+      enviarChunk(ci).then(function(){ci++;setTimeout(proximoChunk,250);});
     }
     proximoChunk();
 
-    /* ── Envia fotos em lotes — cada foto dividida em sub-chunks de 6KB ── */
-    function enviarFotos(){
+    /* ── Coleta fotos: itens normais + subestação (v58: sub adicionada) ── */
+    function _coletarFotos(){
       var fotos=[];
+
+      /* Fotos de itens normais do checklist */
       Object.keys(insp.itens||{}).forEach(function(k){
         var it=insp.itens[k];
         if(!it||!it.fotos||!it.fotos.length)return;
@@ -3736,23 +3747,63 @@ function enviarParaDrive(insp, htmlStr, onComplete){
           fotos.push({nome:nomeItem+'_foto_'+(fi+1)+'.jpg',b64:f.b64});
         });
       });
+
+      /* Fotos de subestação (v58) */
+      var sub=insp.sub||{};
+      /* sub.chk — fotos por item */
+      Object.keys(sub.chk||{}).forEach(function(id){
+        var chkItem=sub.chk[id];
+        if(!chkItem||!chkItem.fotos||!chkItem.fotos.length)return;
+        chkItem.fotos.forEach(function(f,fi){
+          if(!f||!f.b64)return;
+          fotos.push({nome:'sub_chk_'+id.replace(/[^a-zA-Z0-9]/g,'_')+'_'+(fi+1)+'.jpg',b64:f.b64});
+        });
+      });
+      /* sub.trafos */
+      (sub.trafos||[]).forEach(function(t,ti){
+        [['fotos_ttr','ttr'],['fotos_iso','iso'],['fotos_ohm','ohm']].forEach(function(par){
+          (t[par[0]]||[]).forEach(function(f,fi){
+            if(!f||!f.b64)return;
+            fotos.push({nome:'sub_trafo'+(ti+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
+          });
+        });
+      });
+      /* sub.disjs */
+      (sub.disjs||[]).forEach(function(d,di){
+        [['fotos_iso','iso'],['fotos_cr','cr']].forEach(function(par){
+          (d[par[0]]||[]).forEach(function(f,fi){
+            if(!f||!f.b64)return;
+            fotos.push({nome:'sub_disj'+(di+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
+          });
+        });
+      });
+      /* sub.secc */
+      (sub.secc||[]).forEach(function(s,si){
+        [['fotos_iso','iso'],['fotos_cr','cr']].forEach(function(par){
+          (s[par[0]]||[]).forEach(function(f,fi){
+            if(!f||!f.b64)return;
+            fotos.push({nome:'sub_secc'+(si+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
+          });
+        });
+      });
+
+      return fotos;
+    }
+
+    /* ── Envia fotos em chunks sequenciais com retry (v58) ── */
+    function enviarFotos(){
+      var fotos=_coletarFotos();
       if(!fotos.length){
         Tt('\u2705 Drive: relatório salvo — '+protocolo);
         if(typeof onComplete==='function')onComplete();
         return;
       }
-      var FCHUNK=1500;/* v57: reduzido de 5000→1500 para caber no limite de URL do Apps Script */
+      var FCHUNK=1500;
       var tarefas=[];
       fotos.forEach(function(f){
         var total=Math.ceil(f.b64.length/FCHUNK)||1;
         for(var i=0;i<total;i++){
-          tarefas.push({
-            nome: f.nome,
-            protocolo: protocolo,
-            chunk: i,
-            total: total,
-            parte: f.b64.slice(i*FCHUNK,(i+1)*FCHUNK)
-          });
+          tarefas.push({nome:f.nome,protocolo:protocolo,chunk:i,total:total,parte:f.b64.slice(i*FCHUNK,(i+1)*FCHUNK)});
         }
       });
       var fi=0;
@@ -3769,7 +3820,7 @@ function enviarParaDrive(insp, htmlStr, onComplete){
           +'&fchunk='+t.chunk
           +'&ftotal='+t.total
           +'&b64='+encodeURIComponent(t.parte);
-        _get(url).then(function(){fi++;setTimeout(proximaFoto,200);});
+        _getComRetry(url).then(function(){fi++;setTimeout(proximaFoto,200);});
       }
       proximaFoto();
     }
