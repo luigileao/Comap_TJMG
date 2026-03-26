@@ -111,6 +111,7 @@ input:focus,textarea:focus{border-color:var(--a);}
   <div class="hdr ha"><div><div class="ht">Relat&#243;rios</div><div class="hs" id="rc">0 registros</div></div></div>
   <div style="padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="rel-busca" placeholder="Buscar comarca, edifício ou fiscal..." oninput="rRel()"></div>
   <div id="rflt" style="background:#fff;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;"></div>
+  <div id="rsts" style="background:#f8fafc;display:flex;gap:6px;padding:6px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;min-height:38px;"></div>
   <div class="scrl" id="rlst"></div>
   <div class="bnv" id="bn2"></div>
 </div>
@@ -1269,7 +1270,7 @@ EDIFICACOES['SUDOESTE']={
 ]
 };
 
-var S={sessao:null,insp:[],rflt:'todos',ptipo:'todos',dadm:'usuarios',did:null};
+var S={sessao:null,insp:[],rflt:'todos',rsts:'todos',ptipo:'todos',dadm:'usuarios',did:null};
 var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestral',fiscal:'',mat:'',reg:'',os:''},
        itens:{},mats:[],ativ:'',causas:'',lim:'',normas:'NBR 5674',concl:'',pron:{},ativSel:{},
        fach:{FR:{obs:'',nc:false,nd:''},LD:{obs:'',nc:false,nd:''},LE:{obs:'',nc:false,nd:''},FU:{obs:'',nc:false,nd:''}},
@@ -1533,6 +1534,17 @@ function cf(ico,tit,msg,cb){el('ci').textContent=ico;el('ct').textContent=tit;el
 function isGlobal(s){
   s=s||S.sessao;
   return !s||s.tipo==='admin'||s.tipo==='coordenador';
+}
+/* Regra de exclusão:
+   - fiscal (usuario) : pode excluir qualquer inspeção da sua região
+   - admin            : só pode excluir finalizadas (rascunhos pertencem ao fiscal)
+   - coordenador      : sem permissão de exclusão */
+function canDelInsp(i){
+  var s=S.sessao;
+  if(!s)return false;
+  if(s.tipo==='coordenador')return false;
+  if(s.tipo==='admin')return !!(i&&i.st==='finalizada');
+  return true;
 }
 // Filtra uma lista de inspeções pelo acesso da sessão atual.
 // Admin/coordenador vêem tudo; usuário vê apenas da própria região (reg obrigatório).
@@ -1844,7 +1856,7 @@ function rHome(){
       else{h+='<div style="font-size:10px;color:#64748b;">'+fdth(i.data)+'</div>';}
       h+='</div></div><div style="display:flex;gap:6px;">'
         +'<button class="btn br" style="flex:1;padding:8px;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
-        +'<button onclick="cf(\'X\',\'Excluir\',\'Excluir?\',(function(xid){return function(){S.insp=S.insp.filter(function(x){return x.id!==xid;});Sync.queueDeleteInspection(xid);DB.sv();rHome();};})(\'' +i.id+ '\'))" style="background:#f1f5f9;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;">X</button>'
+        +(canDelInsp(i)?'<button onclick="cf(\'X\',\'Excluir\',\'Excluir?\',(function(xid){return function(){S.insp=S.insp.filter(function(x){return x.id!==xid;});Sync.queueDeleteInspection(xid);DB.sv();rHome();};})(\'' +i.id+ '\'))" style="background:#f1f5f9;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;">X</button>':'')
         +'</div></div>';
     });
   }
@@ -1873,25 +1885,160 @@ function rTipos(){
   el('tgrid').innerHTML=h;
 }
 
+function rRelStatusOpts(){
+  var t=S.rflt;
+  if(t==='prontuario')return[
+    {k:'todos',l:'Todos'},{k:'vencido',l:'Vencido',bg:'#fee2e2',c:'#dc2626'},{k:'vence30',l:'Vence em 30d',bg:'#fef3c7',c:'#d97706'},{k:'vigente',l:'Vigente',bg:'#dcfce7',c:'#16a34a'},{k:'pendente',l:'Pendente',bg:'#f1f5f9',c:'#94a3b8'}
+  ];
+  if(t==='periodica'||t==='ose'||t==='programada'||t==='subestacao')return[
+    {k:'todos',l:'Todos'},{k:'rascunho',l:'Rascunho',bg:'#fef3c7',c:'#d97706'},{k:'finalizada',l:'Enviado',bg:'#dcfce7',c:'#16a34a'},{k:'nao_conforme',l:'Não Conforme',bg:'#fee2e2',c:'#dc2626'},{k:'programado',l:'Programado',bg:'#ede9fe',c:'#7c3aed'},{k:'pendente',l:'Pendente',bg:'#f1f5f9',c:'#94a3b8'},{k:'conforme',l:'Conforme',bg:'#dcfce7',c:'#16a34a'}
+  ];
+  return[{k:'todos',l:'Todos'},{k:'rascunho',l:'Rascunho',bg:'#fef3c7',c:'#d97706'},{k:'finalizada',l:'Enviado',bg:'#dcfce7',c:'#16a34a'}];
+}
+function _pronSt(insp){
+  var pron=insp.pron||{};
+  var today=new Date();today.setHours(0,0,0,0);
+  var ms30=30*24*60*60*1000;
+  var worst='pendente';
+  var ord={vencido:0,vence30:1,vigente:2,na:3,pendente:4};
+  PRON_ITENS.forEach(function(item){
+    var p=pron[item.id]||{};
+    if(p.st==='na')return;
+    if(!p.dtRel)return;
+    var dtVal=new Date(p.dtRel+'T00:00:00');
+    dtVal.setFullYear(dtVal.getFullYear()+1);
+    var diff=dtVal-today;
+    var s=diff<0?'vencido':(diff<=ms30?'vence30':'vigente');
+    if(ord[s]<ord[worst])worst=s;
+  });
+  return worst;
+}
+function _inpHasStatus(insp,stKey){
+  var itens=insp.itens||{};
+  return Object.keys(itens).some(function(k){return itens[k]&&itens[k].s===stKey;});
+}
 function rRel(){
   BNS.forEach(function(id){var e=el(id);if(e)e.innerHTML=bH('rel');});
+  var nl={todos:'Todos',periodica:'RITMP',ose:'RITE',programada:'RITP',osp:'OSP',fachada:'Fachada',spda:'SPDA',prontuario:'Laudos',subestacao:'Subestação'};
   var fs=['todos'].concat(Object.keys(TIPOS));
-  var nl={todos:'Todos',periodica:'RITMP – Manutenção Periódica',ose:'RITE – Emergencial',programada:'RITP – Programada',osp:'OSP – Abertura',fachada:'Fachada',spda:'SPDA'};
-  el('rflt').innerHTML=fs.map(function(f){var sel=S.rflt===f;return'<button onclick="S.rflt=\''+f+'\';rRel()" style="border:none;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;background:'+(sel?'#003580':'#f1f5f9')+';color:'+(sel?'#fff':'#64748b')+';">'+(nl[f]||f)+'</button>';}).join('');
-  var _base=S.rflt==='todos'?S.insp:S.insp.filter(function(i){return i.tipo===S.rflt;});
-  var _rbEl=el('rel-busca');var _rb=_rbEl?_rbEl.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''):'';
-  var lista=filterByReg(_base).filter(function(i){
-    if(!_rb)return true;
-    var txt=((i.com||'')+' '+(i.edif||'')+' '+(i.fiscal||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    return txt.indexOf(_rb)>=0;
-  });
-  el('rc').textContent=lista.length+' registro(s)';
-  if(!lista.length){el('rlst').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:40px;">&#128194;</div><div style="font-size:14px;color:#94a3b8;margin-top:10px;font-weight:600;">Nenhum relatorio</div></div>';return;}
+  el('rflt').innerHTML=fs.map(function(f){
+    var sel=S.rflt===f;
+    var tc=TIPOS[f]?TIPOS[f].c:'#003580';
+    return'<button onclick="S.rflt=\''+f+'\';S.rsts=\'todos\';rRel()" style="border:none;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;background:'+(sel?(tc||'#003580'):'#f1f5f9')+';color:'+(sel?'#fff':'#64748b')+';">'+( nl[f]||f)+'</button>';
+  }).join('');
+  var sopts=rRelStatusOpts();
+  var rstsEl=el('rsts');
+  if(sopts.length>1){
+    rstsEl.style.display='flex';
+    rstsEl.innerHTML=sopts.map(function(o){
+      var sel=S.rsts===o.k;
+      return'<button onclick="S.rsts=\''+o.k+'\';rRel()" style="border:none;padding:4px 11px;border-radius:20px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap;'+(sel&&o.bg?'background:'+o.bg+';color:'+o.c+';':'background:'+(sel?'#1e293b':'#e2e8f0')+';color:'+(sel?'#fff':'#64748b')+';')+'">'
+        +(o.bg&&!sel?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+o.c+';margin-right:4px;vertical-align:middle;"></span>':'')
+        +o.l+'</button>';
+    }).join('');
+  } else {
+    rstsEl.style.display='none';
+  }
+  var _base=filterByReg(S.rflt==='todos'?S.insp:S.insp.filter(function(i){return i.tipo===S.rflt;}));
+  var _rbEl=el('rel-busca');
+  var _rb=_rbEl?_rbEl.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''):'';
+  if(_rb){_base=_base.filter(function(i){var txt=((i.com||'')+' '+(i.edif||'')+' '+(i.fiscal||'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');return txt.indexOf(_rb)>=0;});}
+  var _ss=S.rsts||'todos';
+  if(_ss!=='todos'){
+    _base=_base.filter(function(i){
+      if(_ss==='rascunho')return i.st!=='finalizada';
+      if(_ss==='finalizada')return i.st==='finalizada';
+      if(i.tipo==='prontuario')return _pronSt(i)===_ss;
+      return _inpHasStatus(i,_ss);
+    });
+  }
+  el('rc').textContent=_base.length+' registro(s)';
+  if(S.rflt==='prontuario'&&_ss!=='todos'&&_ss!=='rascunho'&&_ss!=='finalizada'){
+    _renderRelPronTable(_base,_ss);
+  } else if((_ss==='nao_conforme'||_ss==='programado'||_ss==='pendente'||_ss==='conforme')&&S.rflt!=='todos'){
+    _renderRelItemTable(_base,_ss);
+  } else {
+    _renderRelLista(_base);
+  }
+}
+function _renderRelLista(lista){
+  if(!lista.length){el('rlst').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:40px;">&#128194;</div><div style="font-size:14px;color:#94a3b8;margin-top:10px;font-weight:600;">Nenhum relatório</div></div>';return;}
   el('rlst').innerHTML=lista.map(function(i){
     var t=TIPOS[i.tipo]||TIPOS.periodica;
     var st=i.st==='finalizada'?{l:'Enviado',bg:'#dcfce7',c:'#16a34a'}:{l:'Rascunho',bg:'#fef3c7',c:'#d97706'};
-    return'<div class="card" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="openDet(\''+i.id+'\')"><div style="width:36px;height:36px;border-radius:9px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;">'+t.i+'</div><div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+i.edif+'</div><div style="font-size:10px;color:#64748b;">'+(i.com||'-')+' - '+fdt(i.dtVistoria||i.data)+'</div><div style="font-size:10px;color:#94a3b8;">'+(i.fiscal||'')+'</div></div><div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;"><span class="bdg" style="background:'+t.bg+';color:'+t.c+';">'+t.l+'</span><span class="bdg" style="background:'+st.bg+';color:'+st.c+';">'+st.l+'</span></div></div>';
+    var pst='';
+    if(i.tipo==='prontuario'){var ps=_pronSt(i);var ptab={vencido:{l:'Vencido',bg:'#fee2e2',c:'#dc2626'},vence30:{l:'30d',bg:'#fef3c7',c:'#d97706'},vigente:{l:'Vigente',bg:'#dcfce7',c:'#16a34a'},pendente:{l:'Pend.',bg:'#f1f5f9',c:'#94a3b8'}};var pd=ptab[ps]||ptab.pendente;pst='<span class="bdg" style="background:'+pd.bg+';color:'+pd.c+';">'+pd.l+'</span>';}
+    return'<div class="card" style="display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="openDet(\''+i.id+'\')">'
+      +'<div style="width:36px;height:36px;border-radius:9px;background:'+t.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;">'+t.i+'</div>'
+      +'<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+i.edif+'</div><div style="font-size:10px;color:#64748b;">'+(i.com||'-')+' — '+fdt(i.dtVistoria||i.data)+'</div><div style="font-size:10px;color:#94a3b8;">'+(i.fiscal||'')+'</div></div>'
+      +'<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;"><span class="bdg" style="background:'+t.bg+';color:'+t.c+';">'+t.l+'</span><span class="bdg" style="background:'+st.bg+';color:'+st.c+';">'+st.l+'</span>'+pst+'</div></div>';
   }).join('');
+}
+function _renderRelPronTable(lista,ss){
+  var today=new Date();today.setHours(0,0,0,0);var ms30=30*24*60*60*1000;
+  var stcfg={vencido:{bg:'#fee2e2',c:'#dc2626',l:'Vencido'},vence30:{bg:'#fef3c7',c:'#d97706',l:'30d'},vigente:{bg:'#dcfce7',c:'#16a34a',l:'Vigente'},pendente:{bg:'#f1f5f9',c:'#94a3b8',l:'Pendente'}};
+  var rows=[];
+  lista.forEach(function(insp){
+    PRON_ITENS.forEach(function(item){
+      var p=(insp.pron||{})[item.id]||{};
+      if(p.st==='na')return;
+      var dtVal=p.dtRel?new Date(p.dtRel+'T00:00:00'):null;
+      if(dtVal)dtVal.setFullYear(dtVal.getFullYear()+1);
+      var diff=dtVal?(dtVal-today):null;
+      var stk=diff===null?'pendente':(diff<0?'vencido':(diff<=ms30?'vence30':'vigente'));
+      if(ss!=='todos'&&stk!==ss)return;
+      rows.push({insp:insp,item:item,p:p,dtVal:dtVal,stk:stk});
+    });
+  });
+  if(!rows.length){el('rlst').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:40px;">&#128203;</div><div style="font-size:14px;color:#94a3b8;margin-top:10px;font-weight:600;">Nenhum item encontrado</div></div>';return;}
+  rows.sort(function(a,b){return({vencido:0,vence30:1,pendente:2,vigente:3}[a.stk]||0)-({vencido:0,vence30:1,pendente:2,vigente:3}[b.stk]||0);});
+  var h='<div style="background:#fff;border-radius:12px;overflow:hidden;margin:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);">';
+  h+='<div style="background:#0369a1;display:grid;grid-template-columns:1fr 90px 80px 72px;padding:0;">';
+  ['Documento / Edificação','Relatório','Vigência','Status'].forEach(function(col,ci){h+='<div style="padding:8px '+(ci===0?'12px':'6px')+';font-size:9px;font-weight:800;color:#fff;text-align:'+(ci===0?'left':'center')+';">'+col+'</div>';});
+  h+='</div>';
+  rows.forEach(function(r,ix){
+    var sc=stcfg[r.stk]||stcfg.pendente;
+    var dtValFmt=r.dtVal?r.dtVal.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+    var dtRelFmt=r.p.dtRel?new Date(r.p.dtRel+'T00:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+    h+='<div style="background:'+(ix%2===0?'#fff':'#f8fafc')+';display:grid;grid-template-columns:1fr 90px 80px 72px;border-top:1px solid #f1f5f9;cursor:pointer;" onclick="openDet(\''+r.insp.id+'\')">'
+      +'<div style="padding:8px 12px;"><div style="font-size:11px;font-weight:700;color:#1e293b;">'+r.item.nm+'</div><div style="font-size:9px;color:#64748b;margin-top:2px;">'+r.insp.edif+' — '+r.insp.com+'</div></div>'
+      +'<div style="padding:8px 6px;font-size:10px;color:#374151;text-align:center;display:flex;align-items:center;justify-content:center;">'+dtRelFmt+'</div>'
+      +'<div style="padding:8px 6px;font-size:10px;color:'+sc.c+';font-weight:700;text-align:center;display:flex;align-items:center;justify-content:center;">'+dtValFmt+'</div>'
+      +'<div style="padding:8px 6px;text-align:center;display:flex;align-items:center;justify-content:center;"><span style="background:'+sc.bg+';color:'+sc.c+';border-radius:8px;padding:2px 6px;font-size:9px;font-weight:800;">'+sc.l+'</span></div>'
+      +'</div>';
+  });
+  h+='</div>';
+  el('rlst').innerHTML=h;
+}
+function _renderRelItemTable(lista,ss){
+  var stobj=ST[ss]||{l:ss,bg:'#f1f5f9',c:'#64748b'};
+  var rows=[];
+  lista.forEach(function(insp){
+    var itens=insp.itens||{};
+    Object.keys(itens).forEach(function(k){
+      var item=itens[k];
+      if(!item||item.s!==ss)return;
+      rows.push({insp:insp,k:k,item:item});
+    });
+  });
+  if(!rows.length){el('rlst').innerHTML='<div style="text-align:center;padding:40px;"><div style="font-size:40px;">&#128203;</div><div style="font-size:14px;color:#94a3b8;margin-top:10px;font-weight:600;">Nenhum item com este status</div></div>';return;}
+  var h='<div style="padding:8px 12px 4px;font-size:11px;font-weight:700;color:#64748b;">'+rows.length+' item(ns) com status <span style="background:'+stobj.bg+';color:'+stobj.c+';border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">'+stobj.l+'</span></div>';
+  h+='<div style="display:flex;flex-direction:column;gap:6px;padding:4px 8px 16px;">';
+  rows.forEach(function(r){
+    var hasFoto=r.item.fotos&&r.item.fotos.length;
+    var hasObs=r.item.obs&&r.item.obs.trim();
+    h+='<div class="card" style="padding:10px 12px;cursor:pointer;border-left:4px solid '+stobj.c+';" onclick="openItem(\''+r.insp.id+'\',\''+r.k+'\')">'+
+      '<div style="display:flex;align-items:flex-start;gap:8px;">'+
+      '<div style="flex:1;"><div style="font-size:12px;font-weight:700;color:#1e293b;line-height:1.3;">'+(r.item.nm||r.item.n||r.k)+'</div>'+
+      '<div style="font-size:10px;color:#64748b;margin-top:3px;">'+r.insp.edif+' — '+r.insp.com+'</div>'+
+      (hasObs?'<div style="font-size:10px;color:#475569;margin-top:3px;border-left:2px solid #e2e8f0;padding-left:6px;">'+r.item.obs+'</div>':'')+
+      '</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">'+
+      '<span style="background:'+stobj.bg+';color:'+stobj.c+';border-radius:8px;padding:2px 8px;font-size:9px;font-weight:800;">'+stobj.l+'</span>'+
+      (hasFoto?'<span style="background:#dbeafe;color:#1d4ed8;border-radius:6px;padding:1px 6px;font-size:9px;font-weight:700;">'+r.item.fotos.length+' foto(s)</span>':'')+
+      '</div></div></div>';
+  });
+  h+='</div>';
+  el('rlst').innerHTML=h;
 }
 
 function rPerf(){
@@ -2416,11 +2563,15 @@ function openDet(id){
     h+='<button class="btn bo" onclick="exportHTML(\''+id+'\')">Exportar HTML</button><div style="height:16px;"></div>';
   }
 
-  el('dbody').innerHTML=h;var dd=el('det-del');if(dd)dd.style.display='';
-  if(i.tipo==='prontuario'){el('dbody').innerHTML=renderDetPron(i);var dd2=el('det-del');if(dd2)dd2.style.display='';}
+  el('dbody').innerHTML=h;var dd=el('det-del');if(dd)dd.style.display=canDelInsp(i)?'':'none';
+  if(i.tipo==='prontuario'){el('dbody').innerHTML=renderDetPron(i);var dd2=el('det-del');if(dd2)dd2.style.display=canDelInsp(i)?'':'none';}
   G('s-det');
 }
-function delDet(){cf('X','Excluir','Excluir esta inspecao?',function(){S.insp=S.insp.filter(function(x){return x.id!==S.did;});Sync.queueDeleteInspection(S.did);DB.sv();Gb('s-home');rHome();Tt('Excluido');});}
+function delDet(){
+  var _i=S.insp.find(function(x){return x.id===S.did;});
+  if(!canDelInsp(_i)){Tt('Sem permissão para excluir este item.');return;}
+  cf('X','Excluir','Excluir esta inspeção?',function(){S.insp=S.insp.filter(function(x){return x.id!==S.did;});Sync.queueDeleteInspection(S.did);DB.sv();Gb('s-home');rHome();Tt('Excluído');});
+}
 
 // ── Fotos e Materiais por item ──────────────────────────────────
 var _eid='',_ekey='',_ifotos=[],_imats=[],_eMode='insp';
@@ -3241,7 +3392,7 @@ function rAdm(){
   _cfgH+='<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:8px;">Dados e PCI</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:4px;"><b>PCI Norte:</b> '+PCI_DATA.length+' registros &#9989;</div>';
   _cfgH+='<div style="font-size:12px;margin-bottom:8px;color:#64748b;">NORTE 71 &middot; LESTE 61 &middot; ZONA_MATA 67 &middot; CENTRAL 37 edif.</div>';
-  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todas as inspeções?\',function(){S.insp.forEach(function(i){Sync.queueDeleteInspection(i.id);});S.insp=[];DB.sv();Tt(\'Limpo\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
+  _cfgH+='<button class="btn bo" style="color:#dc2626;border-color:#dc2626;" onclick="cf(\'X\',\'Limpar\',\'Apagar todos os FINALIZADOS? Rascunhos serão mantidos.\',function(){var _del=S.insp.filter(function(i){return canDelInsp(i);});_del.forEach(function(i){Sync.queueDeleteInspection(i.id);});S.insp=S.insp.filter(function(i){return!canDelInsp(i);});DB.sv();Tt(\'Finalizados removidos — rascunhos mantidos\');rAdm();})">&#128465; Apagar todas as inspeções</button></div>';
   ab.innerHTML=_cfgH;
 }
 }
@@ -3334,12 +3485,16 @@ function admSelAll(){
 function admDelSel(){
   S._admSel=S._admSel||[];
   if(!S._admSel.length)return;
-  var n=S._admSel.length;
-  cf('🗑','Excluir selecionados','Excluir '+n+' inspeção(ões) selecionada(s)?',function(){
-    S._admSel.forEach(function(id){Sync.queueDeleteInspection(id);});
-    S.insp=S.insp.filter(function(i){return S._admSel.indexOf(i.id)===-1;});
+  var _perm=S._admSel.filter(function(id){var _i=S.insp.find(function(x){return x.id===id;});return canDelInsp(_i);});
+  var _bloq=S._admSel.length-_perm.length;
+  if(!_perm.length){Tt('Sem permissão: somente finalizados podem ser excluídos pelo admin.');return;}
+  var n=_perm.length;
+  var aviso=_bloq>0?' ('+_bloq+' rascunho(s) ignorado(s))':'';
+  cf('🗑','Excluir selecionados','Excluir '+n+' finalizado(s)?'+aviso,function(){
+    _perm.forEach(function(id){Sync.queueDeleteInspection(id);});
+    S.insp=S.insp.filter(function(i){return _perm.indexOf(i.id)===-1;});
     S._admSel=[];
-    DB.sv();rAdm();Tt(n+' excluída(s)');
+    DB.sv();rAdm();Tt(n+' excluído(s)'+(_bloq>0?', '+_bloq+' rascunho(s) mantido(s)':''));
   });
 }
 function admExpSel(){
