@@ -1566,8 +1566,15 @@ var Sync={
   },
   mergeRemoteUsers:function(rows){
     if(!Array.isArray(rows)||!rows.length)return;
-    US.splice(0,US.length);
-    rows.forEach(function(r){US.push({id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false});});
+    /* Nunca apaga os usuários padrão (u1-u15).
+       Apenas atualiza existentes e adiciona extras vindos do Supabase. */
+    rows.forEach(function(r){
+      if(!r||!r.id)return;
+      var idx=US.findIndex(function(u){return u.id===r.id;});
+      var obj={id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false};
+      if(idx>=0){US[idx]=obj;}
+      else{US.push(obj);}
+    });
   },
   pullAll:async function(){
     if(!this.ready||!navigator.onLine)return;
@@ -2340,7 +2347,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v63 - fix login tela branca, syncManual botao home, sync auto 30min, Drive acao=cancelar - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
+// TJMG Fiscal PWA v63 - fix login tela branca (mergeRemoteUsers + bootApp background), syncManual botao home, sync auto 30min, Drive acao=cancelar - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 /* ── Sincronização manual — botão na home ─────────────────────────────── */
 async function syncManual(){
@@ -7098,9 +7105,17 @@ async function bootApp(){
   syncExistingDraftGroups();
   DB.svLocal();
   updNet();
-  if(Sync.ready&&navigator.onLine){await Sync.pullAll(); Sync.schedulePush(1200);}
+  /* Renderiza login imediatamente com usuários locais.
+     O pull do Supabase roda em background e atualiza sem bloquear. */
   rLogin();
   BNS.forEach(function(id){var e=el(id);if(e)e.innerHTML=bH('home');});
+  if(Sync.ready&&navigator.onLine){
+    Sync.pullAll().then(function(){
+      Sync.schedulePush(1200);
+      /* Atualiza lista de login se ainda estiver na tela s-login */
+      if(activeScreenId()==='s-login')rLogin();
+    }).catch(function(){});
+  }
   if(S.sessao){if(S.sessao.tipo==='admin'){rAdm();G('s-admin');}else if(S.sessao.tipo==='coordenador'){rCoord();G('s-coord');}else{rHome();G('s-home');}}
 }
 window.addEventListener('online',function(){updNet();if(Sync.ready)Sync.pullAll().then(function(){Sync.schedulePush(600);});});
