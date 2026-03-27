@@ -2261,7 +2261,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v57 - fix chunks URL (6000→1800 / 5000→1500), fix Drive 400 Bad Request
+// TJMG Fiscal PWA v60 - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 function rHome(){
   var s=S.sessao;if(!s)return;
@@ -3254,12 +3254,12 @@ function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function()
     setTimeout(function(){
       if(i.tipo==='subestacao'){
         PhotoStore.loadSubAll(i.id,i.sub||{}).then(function(){
-          var _htmlSub=_gerarHTMLSubStr(i);
+          var _htmlSub=_gerarHTMLSubStr(i.id);
           if(_htmlSub)enviarParaDrive(i,_htmlSub);
         }).catch(function(){});
       }else{
         PhotoStore.loadForInsp(i).then(function(){
-          var _htmlStr=_gerarHTMLStr(i);
+          var _htmlStr=_gerarHTMLStr(i.id);
           if(_htmlStr)enviarParaDrive(i,_htmlStr);
         }).catch(function(){});
       }
