@@ -4019,7 +4019,11 @@ function _doExportHTML(id){
 
 /* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
 function enviarParaDrive(insp, htmlStr, onComplete){
-  if(!DRIVE_SCRIPT_URL)return;
+  if(!DRIVE_SCRIPT_URL){
+    /* Sem Drive configurado — vai direto para o Supabase */
+    if(typeof onComplete==='function')onComplete();
+    return;
+  }
   try{
     var protocolo=insp.protocolo||gerarProtocolo(insp);
     var meta={
@@ -4172,7 +4176,12 @@ function enviarParaDrive(insp, htmlStr, onComplete){
       proximaFoto();
     }
 
-  }catch(e){console.warn('enviarParaDrive erro:',e);}
+  }catch(e){
+    console.warn('enviarParaDrive erro:',e);
+    Tt('\u26a0\ufe0f Drive: erro — '+((e&&e.message)||String(e)).slice(0,40));
+    /* Mesmo com erro no Drive, tenta enviar ao Supabase */
+    if(typeof onComplete==='function')onComplete();
+  }
 }
 
 function rAdm(){
