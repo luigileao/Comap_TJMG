@@ -1276,7 +1276,8 @@ var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 /* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v64
+var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v65
+var EDGE_EMAIL_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/send-report-email'; // v65
 /* Segredo compartilhado com a Edge Function (Supabase > Edge Functions > Secrets > SYNC_SECRET).
    Deixe vazio ('') para desabilitar a verificação (não recomendado em produção). */
 var SYNC_SECRET='';
@@ -1681,6 +1682,12 @@ var Sync={
       if(!resp.ok)throw new Error('Edge push HTTP '+resp.status);
       var d=await resp.json();
       if(!d.ok)throw new Error(d.error||'Edge push erro');
+      /* ── Marca localmente as inspeções confirmadas pelo servidor ── */
+      var _nowEdge=new Date().toISOString();
+      toSync.forEach(function(i){
+        i.synced_at=_nowEdge;
+        i.sync_version=(i.sync_version||0)+1;
+      });
       this.saveState();
       return;
     }
@@ -1707,6 +1714,12 @@ var Sync={
       var rpc=await SB.rpc('upsert_inspections',{rows:rows});
       if(rpc.error)throw rpc.error;
       if(rpc.data&&rpc.data.ok===false)throw new Error(rpc.data.error||'upsert_inspections falhou');
+      /* ── Marca localmente o lote confirmado pelo servidor ── */
+      var _nowRpc=new Date().toISOString();
+      lote.forEach(function(i){
+        i.synced_at=_nowRpc;
+        i.sync_version=(i.sync_version||0)+1;
+      });
       if(off+UPSERT_LOTE<toSync.length){
         await new Promise(function(r){setTimeout(r,300);});
       }
@@ -3487,6 +3500,20 @@ async function uploadHtmlToSupabase(fileName, htmlText, inspId){
   }catch(e){console.warn('Upload HTML falhou',e);return null;}
 }
 
+/* ── Dispara envio de e-mail via Edge Function send-report-email ── */
+async function enviarEmailRelatorio(inspId){
+  if(!navigator.onLine||!EDGE_EMAIL_URL)return;
+  try{
+    var resp=await fetch(EDGE_EMAIL_URL,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({inspId:inspId})
+    });
+    var d=await resp.json();
+    if(d.ok){Tt('\u2709\ufe0f E-mail enviado: '+((d.sentTo||[]).join(', ')));}
+    else{console.warn('send-report-email erro:',d.error);}
+  }catch(e){console.warn('Falha ao enviar e-mail:',e);}
+}
 function exportHTML(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
@@ -3932,8 +3959,10 @@ function _doExportHTML(id){
   enviarParaDrive(i,html,function(){
     Tt('\u2601\ufe0f Supabase: enviando relatório...');
     uploadHtmlToSupabase(nomeArq,html,i.id).then(function(path){
-      if(path)Tt('\u2705 Supabase: relatório salvo!');
-      else Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');
+      if(path){
+        Tt('\u2705 Supabase: relatório salvo!');
+        setTimeout(function(){enviarEmailRelatorio(i.id);},1500);
+      }else{Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');}
     });
   });
 }
@@ -6608,8 +6637,10 @@ function _doExportHTMLSub(id){
   enviarParaDrive(insp,html,function(){
     Tt('\u2601\ufe0f Supabase: enviando relatório...');
     uploadHtmlToSupabase(nomeArq,html,insp.id).then(function(path){
-      if(path)Tt('\u2705 Supabase: relatório salvo!');
-      else Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');
+      if(path){
+        Tt('\u2705 Supabase: relatório salvo!');
+        setTimeout(function(){enviarEmailRelatorio(insp.id);},1500);
+      }else{Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');}
     });
   });
 }
