@@ -3165,6 +3165,44 @@ function _renderDet(id){
       h+='</div></div>';
     });
 
+    /* ── Seção "Não previsto" — atividades dos sistemas selecionados fora da OS ── */
+    if(_hasSel&&(i.sistemas||[]).length){
+      var _npSis={};
+      (i.sistemas||[]).forEach(function(sid){
+        (ATVs[sid]||[]).forEach(function(a){
+          if(_ativSelKeys[a.id])return; /* já está na OS */
+          if(!_npSis[sid])_npSis[sid]={nm:(SIS.find(function(s){return s.id===sid;})||{nm:''}).nm,nn:(SIS.find(function(s){return s.id===sid;})||{n:''}).n,its:[]};
+          _npSis[sid].its.push(a);
+        });
+      });
+      var _npTotal=Object.keys(_npSis).reduce(function(acc,k){return acc+_npSis[k].its.length;},0);
+      if(_npTotal>0){
+        var _npId='np_'+id;
+        h+='<div style="margin-bottom:10px;">';
+        h+='<div onclick="var el2=document.getElementById(\''+_npId+'\');el2.style.display=el2.style.display===\'none\'?\'block\':\'none\'" '
+          +'style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;cursor:pointer;">'
+          +'<span style="font-size:14px;">📋</span>'
+          +'<div style="flex:1;font-size:12px;font-weight:700;color:#64748b;">Não previsto nesta OS</div>'
+          +'<span style="background:#f1f5f9;color:#64748b;border-radius:20px;padding:2px 9px;font-size:10px;font-weight:700;">'+_npTotal+' atividade(s)</span>'
+          +'<span style="color:#94a3b8;font-size:14px;">▼</span>'
+          +'</div>';
+        h+='<div id="'+_npId+'" style="display:none;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;overflow:hidden;">';
+        Object.keys(_npSis).forEach(function(sid){
+          var _s=_npSis[sid];if(!_s.its.length)return;
+          h+='<div style="background:#f8fafc;padding:7px 14px;border-bottom:1px solid #f1f5f9;">'
+            +'<span style="font-size:10px;font-weight:700;color:#94a3b8;">'+_s.nn+' '+_s.nm+'</span></div>';
+          _s.its.forEach(function(a){
+            h+='<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #f8fafc;background:#fff;">'
+              +'<span style="font-size:14px;opacity:.4;">➖</span>'
+              +'<div style="flex:1;font-size:11px;color:#94a3b8;">'+a.n+' '+a.nm+'</div>'
+              +'<span style="background:#f1f5f9;color:#94a3b8;border-radius:20px;padding:2px 8px;font-size:9px;font-weight:700;">Não previsto</span>'
+              +'</div>';
+          });
+        });
+        h+='</div></div>';
+      }
+    }
+
     if(i.st==='em_andamento')h+='<button class="btn ba" onclick="finalizarI(\''+id+'\')">Finalizar Inspeção</button>';
     if(i.st==='finalizada')h+='<button class="btn" style="background:#f59e0b;color:#fff;margin-bottom:8px;" onclick="editarRelatorio(\''+id+'\')">✏️ Editar Relatório</button>';
     h+='<button class="btn bo" onclick="exportHTML(\''+id+'\')">Exportar HTML</button><div style="height:16px;"></div>';
