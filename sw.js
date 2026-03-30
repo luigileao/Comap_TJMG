@@ -5,7 +5,7 @@
    - Domínios externos (Supabase, CDN, Google) → nunca interceptados
 */
 
-const V = 'tjmg-v62';
+const V = 'tjmg-v64';
 const CACHE = [
   './',
   './index.html',
