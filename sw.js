@@ -1,4 +1,4 @@
-/* TJMG Fiscal — Service Worker v56
+/* TJMG Fiscal — Service Worker v65
    Estratégia:
    - App shell (index.html, sw.js, manifest.json) → network-first, fallback cache
    - Demais assets → cache-first, atualiza cache em background SEM clone bug
