@@ -1645,9 +1645,23 @@ var Sync={
     }catch(e){console.warn('Pull falhou',e);}
   },
   pushUsers:async function(){
-    /* Usuários são leves e não disparam trigger pesada — usa SDK direto */
-    if(!SB)return;
     var payload=US.map(this.normalizeUser.bind(this));
+    /* ── Via Edge Function (sem CORS) ── */
+    if(this.useEdge){
+      if(!payload.length&&!this.deletedUsers.length)return;
+      var _hU={'Content-Type':'application/json'};if(SYNC_SECRET)_hU['x-sync-secret']=SYNC_SECRET;
+      var resp=await fetch(EDGE_SYNC_URL+'/push',{
+        method:'POST',headers:_hU,
+        body:JSON.stringify({inspections:[],users:payload,deleteInsps:[],deleteUsers:this.deletedUsers})
+      });
+      if(!resp.ok)throw new Error('Edge pushUsers HTTP '+resp.status);
+      var d=await resp.json();
+      if(!d.ok)throw new Error(d.error||'Edge pushUsers erro');
+      if(this.deletedUsers.length){this.deletedUsers=[];this.saveState();}
+      return;
+    }
+    /* ── Fallback SDK ── */
+    if(!SB)return;
     if(payload.length){
       var up=await SB.from('app_users').upsert(payload,{onConflict:'id'});
       if(up.error)throw up.error;
