@@ -341,10 +341,10 @@ input:focus,textarea:focus{border-color:var(--a);}
 <script>
 'use strict';
 // ------------------------------------------------------------
-// VERSÃO CENTRALIZADA — 'v65.2'
+// VERSÃO CENTRALIZADA — v65
 // Manter em sincronia com sw.js (const V) e manifest.json (start_url ?v=)
 // ------------------------------------------------------------
-var APP_VERSION = 'v65.2';
+var APP_VERSION = 'v65';
 /* US é sempre populado por DB.ld() — não pré-definir aqui evita divergência
    entre duas fontes de verdade e elimina o risco de dados obsoletos serem
    enviados ao Supabase antes do pull inicial. */
@@ -7327,7 +7327,7 @@ setInterval(function(){
 bootApp();
 
 // ------------------------------------------------------------
-// DEBOUNCE nos inputs de busca — v65
+// DEBOUNCE nos inputs de busca — v64
 // Substituiu oninput="rRel()" / oninput="rCoord()" / oninput="fpci()"
 // 280ms de espera antes de disparar o render (evita re-render a cada tecla)
 // ------------------------------------------------------------
