@@ -341,10 +341,10 @@ input:focus,textarea:focus{border-color:var(--a);}
 <script>
 'use strict';
 // ------------------------------------------------------------
-// VERSÃO CENTRALIZADA — v64
+// VERSÃO CENTRALIZADA — v65
 // Manter em sincronia com sw.js (const V) e manifest.json (start_url ?v=)
 // ------------------------------------------------------------
-var APP_VERSION = 'v64';
+var APP_VERSION = 'v65';
 var US=[
   {id:'u1',nome:'Edenias Gonzaga Le\u00e3o',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio T\u00e9cnico',polo:'Montes Claros',ativo:true},
   {id:'u2',nome:'T\u00falio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
@@ -1489,7 +1489,7 @@ var Sync={
       cargo:u.cargo||'',
       polo:u.polo||'',
       ativo:!!u.ativo,
-      updated_at:new Date().toISOString()
+      updated_at:u.updated_at||new Date().toISOString()
     };
   },
   mergeRemoteInspections:function(rows){
@@ -1575,13 +1575,20 @@ var Sync={
   mergeRemoteUsers:function(rows){
     if(!Array.isArray(rows)||!rows.length)return;
     /* Nunca apaga os usuários padrão (u1-u15).
-       Apenas atualiza existentes e adiciona extras vindos do Supabase. */
+       Apenas atualiza existentes se o dado remoto for mais recente.
+       Garante que PINs só mudam quando alterados pelo administrador. */
     rows.forEach(function(r){
       if(!r||!r.id)return;
       var idx=US.findIndex(function(u){return u.id===r.id;});
-      var obj={id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false};
-      if(idx>=0){US[idx]=obj;}
-      else{US.push(obj);}
+      var obj={id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false,updated_at:r.updated_at||''};
+      if(idx>=0){
+        /* Só sobrescreve se o remoto for mais recente que o local */
+        var localTs=Date.parse(US[idx].updated_at||0)||0;
+        var remoteTs=Date.parse(r.updated_at||0)||0;
+        if(remoteTs>=localTs){US[idx]=obj;}
+      } else {
+        US.push(obj);
+      }
     });
   },
   pullAll:async function(){
@@ -4275,12 +4282,13 @@ function saveUser(){
   // Check PIN unique (except self)
   var dup=US.find(function(x){return x.pin===pin&&x.id!==_uEditId;});
   if(dup){el('u-err').textContent='PIN já em uso por '+dup.nome.split(' ')[0]+'. Use outro.';return;}
+  var _now=new Date().toISOString();
   if(_uEditId){
     var u=US.find(function(x){return x.id===_uEditId;});
-    if(u){u.nome=nome;u.mat=el('u-mat').value.trim();u.pin=pin;u.cargo=el('u-cargo').value.trim()||'Fiscal';u.polo='';u.reg=reg;u.ativo=_uAtivo;}
+    if(u){u.nome=nome;u.mat=el('u-mat').value.trim();u.pin=pin;u.cargo=el('u-cargo').value.trim()||'Fiscal';u.polo='';u.reg=reg;u.ativo=_uAtivo;u.updated_at=_now;}
     Tt('✓ Usuário atualizado!');
   } else {
-    US.push({id:'u'+Date.now(),nome:nome,mat:el('u-mat').value.trim(),pin:pin,reg:reg,cargo:el('u-cargo').value.trim()||'Fiscal',polo:'',ativo:_uAtivo});
+    US.push({id:'u'+Date.now(),nome:nome,mat:el('u-mat').value.trim(),pin:pin,reg:reg,cargo:el('u-cargo').value.trim()||'Fiscal',polo:'',ativo:_uAtivo,updated_at:_now});
     Tt('✓ Usuário adicionado!');
   }
   DB.sv();cm('m-usr');rAdm();rLogin();
