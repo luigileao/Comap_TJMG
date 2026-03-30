@@ -345,23 +345,10 @@ input:focus,textarea:focus{border-color:var(--a);}
 // Manter em sincronia com sw.js (const V) e manifest.json (start_url ?v=)
 // ------------------------------------------------------------
 var APP_VERSION = 'v65';
-var US=[
-  {id:'u1',nome:'Edenias Gonzaga Le\u00e3o',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio T\u00e9cnico',polo:'Montes Claros',ativo:true},
-  {id:'u2',nome:'T\u00falio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
-  {id:'u3',nome:'Jar\u00e9m Guarany Gomes Jr.',mat:'T006387-5',pin:'6387',reg:'CENTRAL',cargo:'Fiscal',polo:'Contagem',ativo:true},
-  {id:'u4',nome:'Lu\u00eds Cl\u00e1udio F. Cunha',mat:'600.94701',pin:'4701',reg:'CENTRAL',cargo:'Fiscal',polo:'Betim',ativo:true},
-  {id:'u5',nome:'M\u00e1rcia Gomes Alvarenga',mat:'T008172-9',pin:'8172',reg:'LESTE',cargo:'Fiscal',polo:'Gov. Valadares',ativo:true},
-  {id:'u6',nome:'Guilherme A. Alencar',mat:'P0094702',pin:'4702',reg:'LESTE',cargo:'Fiscal',polo:'Ipatinga',ativo:true},
-  {id:'u7',nome:'Rui Cassiano R. Lima',mat:'P0117128',pin:'7128',reg:'LESTE',cargo:'Fiscal',polo:'Itabira',ativo:true},
-  {id:'u8',nome:'Jos\u00e9 Agostinho H. R. Assun\u00e7\u00e3o',mat:'',pin:'8001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
-  {id:'u9',nome:'Thiago Abreu',mat:'',pin:'9001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
-  {id:'u10',nome:'Alisson Cruz Pereira',mat:'8546-4',pin:'5461',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
-  {id:'u11',nome:'Fl\u00e1vio Ferreira Ribeiro',mat:'60130718',pin:'3071',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
-  {id:'u12',nome:'Raphael Alan Ferreira',mat:'P0115765',pin:'1157',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
-  {id:'u13',nome:'Diego Henrique C. Oliveira',mat:'P0128696',pin:'2869',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
-  {id:'u14',nome:'Vanderl\u00facio de Jesus Ferreira',mat:'',pin:'7743',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true},
-  {id:'u15',nome:'Taciano de Paula Costa Bastos',mat:'',pin:'9254',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true}
-];
+/* US é sempre populado por DB.ld() — não pré-definir aqui evita divergência
+   entre duas fontes de verdade e elimina o risco de dados obsoletos serem
+   enviados ao Supabase antes do pull inicial. */
+var US=[];
 var ADM={u:'admin',p:'1530'};
 var COORD={u:'coord',p:'2026'};
 var REG={NORTE:{l:'Norte',ct:'CT 017-2026',c:'#2563eb',bg:'#dbeafe'},CENTRAL:{l:'Central',ct:'CT 025-2026',c:'#7c3aed',bg:'#ede9fe'},LESTE:{l:'Leste',ct:'CT 019-2026',c:'#16a34a',bg:'#dcfce7'},ZONA_MATA:{l:'Zona da Mata',ct:'CT 018-2026',c:'#b45309',bg:'#fef3c7'},TRIANGULO:{l:'Tri\u00e2ngulo',ct:'CT 392-2022',c:'#0891b2',bg:'#cffafe'},SUL:{l:'Sul',ct:'CT 138-2023',c:'#be185d',bg:'#fce7f3'},SUDOESTE:{l:'Sudoeste',ct:'CT 421-2022',c:'#65a30d',bg:'#ecfccb'}};
@@ -1595,9 +1582,16 @@ var Sync={
     if(!this.ready||!navigator.onLine)return;
     if(!S.sessao)return;
     try{
-      /* Envia deleções pendentes ANTES de buscar */
-      if((this.deletedInsps.length||this.deletedUsers.length)&&!this.busy){
-        try{await this.pushUsers();}catch(e){console.warn('pre-pull push falhou',e);}
+      /* Envia APENAS deleções de usuários antes de buscar.
+         NUNCA faz upsert de dados (pin/nome/etc.) aqui: neste ponto o US
+         ainda não foi reconciliado com o servidor e pode conter pins vazios
+         vindos do localStorage antigo. O upsert completo ocorre APÓS o pull
+         (schedulePush), quando mergeRemoteUsers já aplicou o estado correto. */
+      if(this.deletedUsers.length&&!this.busy&&SB){
+        try{
+          var _preDel=await SB.from('app_users').delete().in('id',this.deletedUsers);
+          if(!_preDel.error){this.deletedUsers=[];this.saveState();}
+        }catch(e){console.warn('pre-pull delete users falhou',e);}
       }
       var _sess=S.sessao;
       var _isGlob=_sess&&(_sess.tipo==='admin'||_sess.tipo==='coordenador');
@@ -1999,20 +1993,20 @@ var DB={
        Garante que u1-u15 nunca desaparecem da tela de login mesmo com
        localStorage corrompido ou de versão anterior. */
     var _defaultUS=[
-      {id:'u1',nome:'Edenias Gonzaga Leão',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'Montes Claros',ativo:true},
+      {id:'u1',nome:'Edenias Gonzaga Leão',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio Técnico',polo:'Montes Claros',ativo:true},
       {id:'u2',nome:'Túlio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
       {id:'u3',nome:'Jarém Guarany Gomes Jr.',mat:'T006387-5',pin:'6387',reg:'CENTRAL',cargo:'Fiscal',polo:'Contagem',ativo:true},
-      {id:'u4',nome:'Luís Cláudio F. Cunha',mat:'600.94701',pin:'4701',reg:'CENTRAL',cargo:'Fiscal-Engenheiro Eletricista',polo:'Betim',ativo:true},
+      {id:'u4',nome:'Luís Cláudio F. Cunha',mat:'600.94701',pin:'4701',reg:'CENTRAL',cargo:'Fiscal',polo:'Betim',ativo:true},
       {id:'u5',nome:'Márcia Gomes Alvarenga',mat:'T008172-9',pin:'8172',reg:'LESTE',cargo:'Fiscal',polo:'Gov. Valadares',ativo:true},
-      {id:'u6',nome:'Guilherme A. Alencar',mat:'P0094702',pin:'4702',reg:'LESTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'Ipatinga',ativo:true},
+      {id:'u6',nome:'Guilherme A. Alencar',mat:'P0094702',pin:'4702',reg:'LESTE',cargo:'Fiscal',polo:'Ipatinga',ativo:true},
       {id:'u7',nome:'Rui Cassiano R. Lima',mat:'P0117128',pin:'7128',reg:'LESTE',cargo:'Fiscal',polo:'Itabira',ativo:true},
       {id:'u8',nome:'José Agostinho H. R. Assunção',mat:'',pin:'8001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
-      {id:'u9',nome:'Thiago Abreu',mat:'',pin:'9001',reg:'ZONA_MATA',cargo:'Fiscal-Engenheiro Eletricista',polo:'Juiz de Fora',ativo:true},
+      {id:'u9',nome:'Thiago Abreu',mat:'',pin:'9001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
       {id:'u10',nome:'Alisson Cruz Pereira',mat:'8546-4',pin:'5461',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
-      {id:'u11',nome:'Flávio Ferreira Ribeiro',mat:'60130718',pin:'3071',reg:'TRIANGULO',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
-      {id:'u12',nome:'Raphael Alan Ferreira',mat:'P0115765',pin:'1157',reg:'SUL',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
+      {id:'u11',nome:'Flávio Ferreira Ribeiro',mat:'60130718',pin:'3071',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
+      {id:'u12',nome:'Raphael Alan Ferreira',mat:'P0115765',pin:'1157',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
       {id:'u13',nome:'Diego Henrique C. Oliveira',mat:'P0128696',pin:'2869',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
-      {id:'u14',nome:'Vanderlúcio de Jesus Ferreira',mat:'',pin:'7743',reg:'SUDOESTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
+      {id:'u14',nome:'Vanderlúcio de Jesus Ferreira',mat:'',pin:'7743',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true},
       {id:'u15',nome:'Taciano de Paula Costa Bastos',mat:'',pin:'9254',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true}
     ];
     /* Sempre reinicia US com os padrões */
@@ -2027,7 +2021,20 @@ var DB={
           _tuArr.forEach(function(x){
             if(!x||!x.id)return;
             var _idx=US.findIndex(function(u){return u.id===x.id;});
-            if(_idx>=0){US[_idx]=Object.assign({},US[_idx],x);}
+            if(_idx>=0){
+              /* Só aplica campos do localStorage se forem válidos.
+                 Impede que pin:'' corrompido sobrescreva o pin correto do _defaultUS. */
+              var _safe={};
+              if(x.pin&&/^\d{4}$/.test(x.pin))_safe.pin=x.pin;
+              if(x.nome&&x.nome.trim())_safe.nome=x.nome.trim();
+              if(x.updated_at)_safe.updated_at=x.updated_at;
+              if(x.cargo)_safe.cargo=x.cargo;
+              if(x.reg)_safe.reg=x.reg;
+              if(x.mat!==undefined)_safe.mat=x.mat;
+              if(x.polo!==undefined)_safe.polo=x.polo;
+              if(x.ativo!==undefined)_safe.ativo=x.ativo;
+              US[_idx]=Object.assign({},US[_idx],_safe);
+            }
             else{US.push(x);}
           });
         }
