@@ -110,7 +110,7 @@ input:focus,textarea:focus{border-color:var(--a);}
 
 <div class="scr" id="s-rel" style="padding-top:var(--st)">
   <div class="hdr ha"><div><div class="ht">Relat&#243;rios</div><div class="hs" id="rc">0 registros</div></div></div>
-  <div style="padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="rel-busca" placeholder="Buscar comarca, edifício ou fiscal..." oninput="rRel()"></div>
+  <div style="padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="rel-busca" placeholder="Buscar comarca, edifício ou fiscal..."></div>
   <div id="rflt" style="background:#fff;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;"></div>
   <div id="rsts" style="background:#f8fafc;display:flex;gap:6px;padding:6px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;min-height:38px;"></div>
   <div class="scrl" id="rlst"></div>
@@ -135,7 +135,7 @@ input:focus,textarea:focus{border-color:var(--a);}
     <button style="width:100%;border:none;background:#dc2626;color:#fff;border-radius:10px;padding:11px 14px;font-size:12px;font-weight:700;cursor:pointer;border-bottom:3px solid #991b1b;display:flex;align-items:center;gap:10px;" onclick="window.open('https://script.google.com/a/macros/tjmg.jus.br/s/AKfycbyZqfhmkI2HzZ_y8Y6UzIWvmPmKD_v3M-vC7za-N68M2fb1Wxx6qFUM-jKUedbU-LT3/exec','_blank')"><span style="font-size:18px;">🧯</span><div style="text-align:left;"><div>Controle PCI — Norte</div><div style="font-size:10px;opacity:.75;font-weight:600;">Extintores · Mangueiras · RTI</div></div></button>
     <button style="width:100%;border:none;background:#be185d;color:#fff;border-radius:10px;padding:11px 14px;font-size:12px;font-weight:700;cursor:pointer;border-bottom:3px solid #9d174d;display:flex;align-items:center;gap:10px;margin-top:6px;" onclick="window.open('https://script.google.com/a/macros/tjmg.jus.br/s/AKfycbwmy_f43xtAiqAuglPSzMkdb72wFM7k-wZ7JGCyr_um5S-zrGsT-3kNcNLxGJPla7Cnqg/exec','_blank')"><span style="font-size:18px;">🧯</span><div style="text-align:left;"><div>Controle PCI — Sul</div><div style="font-size:10px;opacity:.75;font-weight:600;">Extintores · Mangueiras · RTI</div></div></button>
   </div>
-  <div style="padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="coord-busca" placeholder="Buscar comarca, edifício ou fiscal..." oninput="rCoord()"></div>
+  <div style="padding:8px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="coord-busca" placeholder="Buscar comarca, edifício ou fiscal..."></div>
   <div style="background:#fff;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;" id="coord-reg-flt"></div>
   <div style="background:#fff;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;" id="coord-flt"></div>
   <div id="coord-sel-bar" style="display:none;"></div>
@@ -151,7 +151,7 @@ input:focus,textarea:focus{border-color:var(--a);}
 <div class="scr" id="s-pci" style="padding-top:var(--st)">
   <div class="hdr hr"><span class="bkb" onclick="if(S._admPciSessao){S.sessao=S._admPciSessao;delete S._admPciSessao;G('s-admin');}else{G('s-home');}">&#8592;</span>
   <div><div class="ht" id="pci-ht">&#129711; Controle PCI</div><div class="hs" id="pci-hs">carregando...</div></div></div>
-  <div style="padding:10px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="pb" placeholder="Buscar comarca ou tipo..." oninput="fpci()"></div>
+  <div style="padding:10px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;"><input id="pb" placeholder="Buscar comarca ou tipo..."></div>
   <div id="pflt" style="background:#fff;display:flex;gap:6px;padding:8px 12px;overflow-x:auto;border-bottom:1px solid var(--bo);flex-shrink:0;"></div>
   <div class="scrl" style="padding:0;" id="ptbl"></div>
 </div>
@@ -314,7 +314,7 @@ input:focus,textarea:focus{border-color:var(--a);}
     <div class="lbl">PIN (4 dígitos) *</div>
     <input id="u-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="margin-bottom:10px;" autocomplete="new-password">
     <div class="lbl">Cargo</div>
-    <input id="u-cargo" placeholder="Ex: Fiscal, Apoio Técnico" style="margin-bottom:10px;" autocapitalize="words">
+    <input id="u-cargo" placeholder="Ex: Fiscal, Fiscal" style="margin-bottom:10px;" autocapitalize="words">
     
     <div class="lbl">Região *</div>
     <select id="u-reg" style="margin-bottom:10px;">
@@ -340,6 +340,11 @@ input:focus,textarea:focus{border-color:var(--a);}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 'use strict';
+// ------------------------------------------------------------
+// VERSÃO CENTRALIZADA — v64
+// Manter em sincronia com sw.js (const V) e manifest.json (start_url ?v=)
+// ------------------------------------------------------------
+var APP_VERSION = 'v64';
 var US=[
   {id:'u1',nome:'Edenias Gonzaga Le\u00e3o',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio T\u00e9cnico',polo:'Montes Claros',ativo:true},
   {id:'u2',nome:'T\u00falio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
@@ -1273,7 +1278,7 @@ EDIFICACOES['SUDOESTE']={
 ]
 };
 
-var S={sessao:null,insp:[],rflt:'todos',rsts:'todos',ptipo:'todos',dadm:'usuarios',did:null};
+var S={sessao:null,insp:[],rflt:'todos',rsts:'todos',ptipo:'todos',dadm:'usuarios',did:null,_lastSync:0,_syncBusy:false};
 var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestral',fiscal:'',mat:'',reg:'',os:''},
        itens:{},mats:[],ativ:'',causas:'',lim:'',normas:'NBR 5674',concl:'',pron:{},ativSel:{},
        fach:{FR:{obs:'',nc:false,nd:''},LD:{obs:'',nc:false,nd:''},LE:{obs:'',nc:false,nd:''},FU:{obs:'',nc:false,nd:''}},
@@ -1283,8 +1288,11 @@ var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestr
 var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
 var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
-/* ── Edge Function (v57) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v58
+/* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
+var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v64
+/* Segredo compartilhado com a Edge Function (Supabase > Edge Functions > Secrets > SYNC_SECRET).
+   Deixe vazio ('') para desabilitar a verificação (não recomendado em produção). */
+var SYNC_SECRET='';
 // ── Google Drive (Apps Script) ─────────────────────────────────────────────
 // Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
 var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
@@ -1566,8 +1574,15 @@ var Sync={
   },
   mergeRemoteUsers:function(rows){
     if(!Array.isArray(rows)||!rows.length)return;
-    US.splice(0,US.length);
-    rows.forEach(function(r){US.push({id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false});});
+    /* Nunca apaga os usuários padrão (u1-u15).
+       Apenas atualiza existentes e adiciona extras vindos do Supabase. */
+    rows.forEach(function(r){
+      if(!r||!r.id)return;
+      var idx=US.findIndex(function(u){return u.id===r.id;});
+      var obj={id:r.id,nome:r.nome,mat:r.mat||'',pin:r.pin||'',reg:r.reg||'',cargo:r.cargo||'Fiscal',polo:r.polo||'',ativo:r.ativo!==false};
+      if(idx>=0){US[idx]=obj;}
+      else{US.push(obj);}
+    });
   },
   pullAll:async function(){
     if(!this.ready||!navigator.onLine)return;
@@ -1584,7 +1599,8 @@ var Sync={
       /* ── Via Edge Function (preferencial: sem overhead PostgREST, sem CORS issue) ── */
       if(this.useEdge){
         var edgeUrl=EDGE_SYNC_URL+'/pull'+(_reg?'?reg='+encodeURIComponent(_reg):'');
-        var resp=await fetch(edgeUrl,{method:'GET',headers:{'Content-Type':'application/json'}});
+        var _hPull={'Content-Type':'application/json'};if(SYNC_SECRET)_hPull['x-sync-secret']=SYNC_SECRET;
+        var resp=await fetch(edgeUrl,{method:'GET',headers:_hPull});
         if(!resp.ok)throw new Error('Edge pull HTTP '+resp.status);
         var d=await resp.json();
         if(!d.ok)throw new Error(d.error||'Edge pull erro');
@@ -1655,9 +1671,10 @@ var Sync={
       /* Comprime fotos antes de enviar (thumbs 480px/0.45q ~15-25 KB cada) */
       Tt('\u2601\ufe0f Sync: comprimindo fotos...');
       var rows=await Promise.all(toSync.map(this.normalizarInspComFotos.bind(this)));
+      var _hPush={'Content-Type':'application/json'};if(SYNC_SECRET)_hPush['x-sync-secret']=SYNC_SECRET;
       var resp=await fetch(EDGE_SYNC_URL+'/push',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:_hPush,
         body:JSON.stringify({inspections:rows,deleteInsps:_idsParaDel,users:[],deleteUsers:[]})
       });
       if(!resp.ok)throw new Error('Edge push HTTP '+resp.status);
@@ -1971,25 +1988,44 @@ var DB={
       });
     })).catch(function(){});}
     var s=localStorage.getItem('ts');if(s){var d=JSON.parse(s);if(Date.now()-(d._t||0)<28800000)S.sessao=d;else localStorage.removeItem('ts');}
-    var u=localStorage.getItem('tu');if(u){var ul=JSON.parse(u);if(ul&&ul.length){US.splice(0,US.length);ul.forEach(function(x){US.push(x);})}}
+    /* ── Carrega usuários: padrão sempre presentes, tu só para extras/edições ──
+       Garante que u1-u15 nunca desaparecem da tela de login mesmo com
+       localStorage corrompido ou de versão anterior. */
     var _defaultUS=[
-      {id:'u1',nome:'Edenias Gonzaga Leão',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Apoio Técnico',polo:'Montes Claros',ativo:true},
+      {id:'u1',nome:'Edenias Gonzaga Leão',mat:'P0155070',pin:'0872',reg:'NORTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'Montes Claros',ativo:true},
       {id:'u2',nome:'Túlio Heleno L. Lobato',mat:'T2183-2',pin:'2183',reg:'NORTE',cargo:'Fiscal',polo:'Montes Claros',ativo:true},
       {id:'u3',nome:'Jarém Guarany Gomes Jr.',mat:'T006387-5',pin:'6387',reg:'CENTRAL',cargo:'Fiscal',polo:'Contagem',ativo:true},
-      {id:'u4',nome:'Luís Cláudio F. Cunha',mat:'600.94701',pin:'4701',reg:'CENTRAL',cargo:'Fiscal',polo:'Betim',ativo:true},
+      {id:'u4',nome:'Luís Cláudio F. Cunha',mat:'600.94701',pin:'4701',reg:'CENTRAL',cargo:'Fiscal-Engenheiro Eletricista',polo:'Betim',ativo:true},
       {id:'u5',nome:'Márcia Gomes Alvarenga',mat:'T008172-9',pin:'8172',reg:'LESTE',cargo:'Fiscal',polo:'Gov. Valadares',ativo:true},
-      {id:'u6',nome:'Guilherme A. Alencar',mat:'P0094702',pin:'4702',reg:'LESTE',cargo:'Fiscal',polo:'Ipatinga',ativo:true},
+      {id:'u6',nome:'Guilherme A. Alencar',mat:'P0094702',pin:'4702',reg:'LESTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'Ipatinga',ativo:true},
       {id:'u7',nome:'Rui Cassiano R. Lima',mat:'P0117128',pin:'7128',reg:'LESTE',cargo:'Fiscal',polo:'Itabira',ativo:true},
       {id:'u8',nome:'José Agostinho H. R. Assunção',mat:'',pin:'8001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
-      {id:'u9',nome:'Thiago Abreu',mat:'',pin:'9001',reg:'ZONA_MATA',cargo:'Fiscal',polo:'Juiz de Fora',ativo:true},
+      {id:'u9',nome:'Thiago Abreu',mat:'',pin:'9001',reg:'ZONA_MATA',cargo:'Fiscal-Engenheiro Eletricista',polo:'Juiz de Fora',ativo:true},
       {id:'u10',nome:'Alisson Cruz Pereira',mat:'8546-4',pin:'5461',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
-      {id:'u11',nome:'Flávio Ferreira Ribeiro',mat:'60130718',pin:'3071',reg:'TRIANGULO',cargo:'Fiscal',polo:'',ativo:true},
-      {id:'u12',nome:'Raphael Alan Ferreira',mat:'P0115765',pin:'1157',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
+      {id:'u11',nome:'Flávio Ferreira Ribeiro',mat:'60130718',pin:'3071',reg:'TRIANGULO',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
+      {id:'u12',nome:'Raphael Alan Ferreira',mat:'P0115765',pin:'1157',reg:'SUL',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
       {id:'u13',nome:'Diego Henrique C. Oliveira',mat:'P0128696',pin:'2869',reg:'SUL',cargo:'Fiscal',polo:'',ativo:true},
-      {id:'u14',nome:'Vanderlúcio de Jesus Ferreira',mat:'',pin:'7743',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true},
+      {id:'u14',nome:'Vanderlúcio de Jesus Ferreira',mat:'',pin:'7743',reg:'SUDOESTE',cargo:'Fiscal-Engenheiro Eletricista',polo:'',ativo:true},
       {id:'u15',nome:'Taciano de Paula Costa Bastos',mat:'',pin:'9254',reg:'SUDOESTE',cargo:'Fiscal',polo:'',ativo:true}
     ];
-    _defaultUS.forEach(function(def){if(!US.find(function(x){return x.id===def.id;}))US.push(def);});
+    /* Sempre reinicia US com os padrões */
+    US.splice(0,US.length);
+    _defaultUS.forEach(function(d){US.push(d);});
+    /* Aplica edições do admin (tu): atualiza existentes, adiciona extras */
+    try{
+      var _tu=localStorage.getItem('tu');
+      if(_tu){
+        var _tuArr=JSON.parse(_tu);
+        if(Array.isArray(_tuArr)){
+          _tuArr.forEach(function(x){
+            if(!x||!x.id)return;
+            var _idx=US.findIndex(function(u){return u.id===x.id;});
+            if(_idx>=0){US[_idx]=Object.assign({},US[_idx],x);}
+            else{US.push(x);}
+          });
+        }
+      }
+    }catch(_e){console.warn('tu parse erro',_e);}
   }catch(e){}}
 };
 
@@ -2321,8 +2357,42 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v62 - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
+// TJMG Fiscal PWA v63 - fix login tela branca (mergeRemoteUsers + bootApp background), syncManual botao home, sync auto 30min, Drive acao=cancelar - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
+/* ── Sincronização manual — botão na home ─────────────────────────────── */
+async function syncManual(){
+  if(!Sync.ready){Tt('Sync não disponível — verifique conexão');return;}
+  if(!navigator.onLine){Tt('⚠️ Sem conexão — aguarde o sinal');return;}
+  if(S._syncBusy){Tt('☁️ Sincronização já em andamento...');return;}
+  S._syncBusy=true;
+  var btn=el('btn-sync-manual');
+  if(btn){btn.disabled=true;btn.textContent='☁️ Sincronizando...';}
+  Tt('☁️ Sincronizando com o servidor...');
+  try{
+    await Sync.pullAll();
+    await new Promise(function(r){Sync.schedulePush(200);setTimeout(r,800);});
+    S._lastSync=Date.now();
+    DB.sv();
+    var _fin=S.insp.filter(function(i){return i.st==='finalizada';}).length;
+    var _rasc=S.insp.filter(function(i){return i.st==='em_andamento';}).length;
+    Tt('✅ Sincronizado — '+_fin+' enviado(s), '+_rasc+' rascunho(s)');
+    if(activeScreenId()==='s-home')rHome();
+  }catch(e){
+    Tt('⚠️ Erro na sincronização: '+(e&&e.message?e.message:'falha de rede'));
+  }finally{
+    S._syncBusy=false;
+    if(btn){btn.disabled=false;btn.textContent='☁️ Sincronizar Equipe';}
+  }
+}
+function _fmtLastSync(){
+  if(!S._lastSync)return 'Nunca sincronizado';
+  var d=Math.round((Date.now()-S._lastSync)/60000);
+  if(d<1)return 'Agora mesmo';
+  if(d===1)return 'Há 1 min';
+  if(d<60)return 'Há '+d+' min';
+  var h=Math.round(d/60);
+  return 'Há '+h+'h';
+}
 function rHome(){
   var s=S.sessao;if(!s)return;
   var R=REG[s.reg]||{l:s.reg||'',c:'#003580',bg:'#dbeafe'};
@@ -2344,6 +2414,11 @@ function rHome(){
     +'<div class="stat" style="border-color:#16a34a;"><div style="font-size:20px;font-weight:900;color:#16a34a;">'+envs.length+'</div><div style="font-size:9px;color:#64748b;">Enviados</div></div>'
     +'<div class="stat" style="border-color:#d97706;"><div style="font-size:20px;font-weight:900;color:#d97706;">'+rascs.length+'</div><div style="font-size:9px;color:#64748b;">Rascunhos</div></div>'
     +'<div class="stat" style="border-color:#2563eb;"><div style="font-size:20px;font-weight:900;color:#2563eb;">'+coms+'</div><div style="font-size:9px;color:#64748b;">Comarcas</div></div></div>'
+    +'<button id="btn-sync-manual" onclick="syncManual()" style="width:100%;border:none;background:'+(navigator.onLine?'#0f766e':'#94a3b8')+';color:#fff;border-radius:12px;padding:11px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+    +'<span style="font-size:18px;">☁️</span>'
+    +'<div style="flex:1;text-align:left;"><div style="font-weight:800;">Sincronizar Equipe</div><div style="font-size:9px;opacity:.8;font-weight:500;">'+(navigator.onLine?_fmtLastSync():'Sem conexão')+'</div></div>'
+    +'<span style="font-size:18px;opacity:.6;">↑↓</span>'
+    +'</button>'
     +'<div class="cta" onclick="navt(\'tipos\')">'
     +'<span style="font-size:22px;">+</span>'
     +'<div style="flex:1;"><div style="font-size:14px;font-weight:800;color:#fff;">Criar Relatorio</div>'
@@ -3377,9 +3452,10 @@ async function uploadHtmlToSupabase(fileName, htmlText, inspId){
   try{
     /* ── Via Edge Function ── */
     if(Sync.useEdge){
+      var _hUp={'Content-Type':'application/json'};if(SYNC_SECRET)_hUp['x-sync-secret']=SYNC_SECRET;
       var resp=await fetch(EDGE_SYNC_URL+'/upload-report',{
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:_hUp,
         body:JSON.stringify({fileName:fileName,htmlText:htmlText,inspId:inspId})
       });
       if(!resp.ok)throw new Error('Edge upload HTTP '+resp.status);
@@ -6728,7 +6804,7 @@ if('serviceWorker' in navigator){
     _reloadingSW=true;
     location.reload();
   });
-  navigator.serviceWorker.register('./sw.js?v=44').then(function(r){
+  navigator.serviceWorker.register('./sw.js?v=64').then(function(r){
     if(r.update)r.update();
     r.addEventListener('updatefound',function(){
       var w=r.installing;
@@ -7040,9 +7116,17 @@ async function bootApp(){
   syncExistingDraftGroups();
   DB.svLocal();
   updNet();
-  if(Sync.ready&&navigator.onLine){await Sync.pullAll(); Sync.schedulePush(1200);}
+  /* Renderiza login imediatamente com usuários locais.
+     O pull do Supabase roda em background e atualiza sem bloquear. */
   rLogin();
   BNS.forEach(function(id){var e=el(id);if(e)e.innerHTML=bH('home');});
+  if(Sync.ready&&navigator.onLine){
+    Sync.pullAll().then(function(){
+      Sync.schedulePush(1200);
+      /* Atualiza lista de login se ainda estiver na tela s-login */
+      if(activeScreenId()==='s-login')rLogin();
+    }).catch(function(){});
+  }
   if(S.sessao){if(S.sessao.tipo==='admin'){rAdm();G('s-admin');}else if(S.sessao.tipo==='coordenador'){rCoord();G('s-coord');}else{rHome();G('s-home');}}
 }
 window.addEventListener('online',function(){updNet();if(Sync.ready)Sync.pullAll().then(function(){Sync.schedulePush(600);});});
@@ -7057,15 +7141,51 @@ window.addEventListener('visibilitychange',function(){
     Sync.pullAll().then(function(){Sync.schedulePush(800);});
   }
 });
-/* Pull periódico a cada 60s: propaga deleções e alterações de outros
-   usuários da mesma região sem precisar fechar/reabrir o app */
+/* Pull periódico a cada 5 min: propaga mudanças de outros fiscais da região */
 setInterval(function(){
   if(Sync.ready&&navigator.onLine&&!document.hidden){
-    Sync.pullAll().then(function(){Sync.schedulePush(1000);});
+    Sync.pullAll().then(function(){
+      Sync.schedulePush(1000);
+      S._lastSync=Date.now();
+      /* Atualiza badge do botão se home estiver visível */
+      var btn=el('btn-sync-manual');
+      if(btn){var sub=btn.querySelector('div div:last-child');if(sub)sub.textContent=_fmtLastSync();}
+    });
   }
 },300000);
+/* Sync profundo a cada 30 min: garante que todos os relatórios finalizados
+   que ainda não subiram ao Supabase sejam enviados (ex: criados offline) */
+setInterval(function(){
+  if(!Sync.ready||!navigator.onLine||document.hidden||S._syncBusy)return;
+  S._syncBusy=true;
+  Sync.pullAll().then(function(){
+    return new Promise(function(res){Sync.schedulePush(300);setTimeout(res,600);});
+  }).then(function(){
+    S._lastSync=Date.now();
+    S._syncBusy=false;
+    var btn=el('btn-sync-manual');
+    if(btn){var sub=btn.querySelector('div div:last-child');if(sub)sub.textContent=_fmtLastSync();}
+  }).catch(function(){S._syncBusy=false;});
+},1800000);
 bootApp();
 
+// ------------------------------------------------------------
+// DEBOUNCE nos inputs de busca — v64
+// Substituiu oninput="rRel()" / oninput="rCoord()" / oninput="fpci()"
+// 280ms de espera antes de disparar o render (evita re-render a cada tecla)
+// ------------------------------------------------------------
+(function(){
+  function debounce(fn, ms){
+    var t;
+    return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
+  }
+  var rBusca = document.getElementById('rel-busca');
+  var cBusca = document.getElementById('coord-busca');
+  var pBusca = document.getElementById('pb');
+  if(rBusca) rBusca.addEventListener('input', debounce(rRel,   280));
+  if(cBusca) cBusca.addEventListener('input', debounce(rCoord, 280));
+  if(pBusca) pBusca.addEventListener('input', debounce(fpci,   280));
+})();
 
 </script>
 </body>
