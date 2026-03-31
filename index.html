@@ -1272,18 +1272,15 @@ var F={tipo:'periodica',et:0,id:'',ets:[],d:{com:'',edif:'',grp:'B',tv:'trimestr
        schk:{},med:{p1:'',p2:'',p3:'',bep:''}};
 
 
-var SUPABASE_URL='https://mjhmadtkwwkufakplrrj.supabase.co';
-var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaG1hZHRrd3drdWZha3BscnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTQ5MTQsImV4cCI6MjA4OTYzMDkxNH0.njut4xTQCHtvbtzonCcUVdOSiAUwl_CKphEVfjAy_gc';
-var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaG1hZHRrd3drdWZha3BscnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTQ5MTQsImV4cCI6MjA4OTYzMDkxNH0.njut4xTQCHtvbtzonCcUVdOSiAUwl_CKphEVfjAy_gc';
+var SUPABASE_URL='https://ynlindnkuyueouzatcpt.supabase.co';
+var SUPABASE_PUBLISHABLE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
+var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlubGluZG5rdXl1ZW91emF0Y3B0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzOTY2NTgsImV4cCI6MjA4OTk3MjY1OH0.HBxz_CeZ_OEKskELXYe3gVkdZgUC5wStqV2UvRjGUaw';
 /* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/tjmg-sync'; // v65
-var EDGE_EMAIL_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/send-report-email'; // v65
+var EDGE_SYNC_URL='https://ynlindnkuyueouzatcpt.supabase.co/functions/v1/tjmg-sync'; // v65
+// v66: email (Resend) e envio ao Drive removidos — apenas /pull e /push ativos
 /* Segredo compartilhado com a Edge Function (Supabase > Edge Functions > Secrets > SYNC_SECRET).
    Deixe vazio ('') para desabilitar a verificação (não recomendado em produção). */
 var SYNC_SECRET='';
-// ── Google Drive (Apps Script) ─────────────────────────────────────────────
-// Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
-var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
 var SB=null;
 var Sync={
   ready:false,
@@ -1645,23 +1642,9 @@ var Sync={
     }catch(e){console.warn('Pull falhou',e);}
   },
   pushUsers:async function(){
-    var payload=US.map(this.normalizeUser.bind(this));
-    /* ── Via Edge Function (sem CORS) ── */
-    if(this.useEdge){
-      if(!payload.length&&!this.deletedUsers.length)return;
-      var _hU={'Content-Type':'application/json'};if(SYNC_SECRET)_hU['x-sync-secret']=SYNC_SECRET;
-      var resp=await fetch(EDGE_SYNC_URL+'/push',{
-        method:'POST',headers:_hU,
-        body:JSON.stringify({inspections:[],users:payload,deleteInsps:[],deleteUsers:this.deletedUsers})
-      });
-      if(!resp.ok)throw new Error('Edge pushUsers HTTP '+resp.status);
-      var d=await resp.json();
-      if(!d.ok)throw new Error(d.error||'Edge pushUsers erro');
-      if(this.deletedUsers.length){this.deletedUsers=[];this.saveState();}
-      return;
-    }
-    /* ── Fallback SDK ── */
+    /* Usuários são leves e não disparam trigger pesada — usa SDK direto */
     if(!SB)return;
+    var payload=US.map(this.normalizeUser.bind(this));
     if(payload.length){
       var up=await SB.from('app_users').upsert(payload,{onConflict:'id'});
       if(up.error)throw up.error;
@@ -2398,7 +2381,7 @@ function openDetCoord(id){
 }
 
 
-// TJMG Fiscal PWA v63 - fix login tela branca (mergeRemoteUsers + bootApp background), syncManual botao home, sync auto 30min, Drive acao=cancelar - fix finalizarI bug (i→i.id em _gerarHTMLStr/_gerarHTMLSubStr), Drive getFolderById
+// TJMG Fiscal PWA v66 - remove envio ao Drive (Apps Script) e envio de email (Resend/send-report-email); apenas /pull e /push ativos no Supabase
 // Todos os sistemas: Login, Home, PCI, Relatorios, Formularios, Admin
 /* ── Sincronização manual — botão na home ─────────────────────────────── */
 async function syncManual(){
@@ -3463,34 +3446,6 @@ function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function()
   el('st').textContent='Relatório Finalizado!';
   el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');
   G('s-suc');
-  /* ── Envia para Drive em background após finalizar ── */
-  if(DRIVE_SCRIPT_URL&&i){
-    setTimeout(function(){
-      if(i.tipo==='subestacao'){
-        PhotoStore.loadSubAll(i.id,i.sub||{}).then(function(){
-          var _htmlSub=_gerarHTMLSubStr(i.id);
-          if(!_htmlSub)return;
-          var _nomeArqSub='Sub_'+((i.sub||{}).tipo_sub||'AEREA')+'_'+(i.com||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+fdt(i.data||Date.now()).replace(/\//g,'-')+'.html';
-          enviarParaDrive(i,_htmlSub,function(){
-            uploadHtmlToSupabase(_nomeArqSub,_htmlSub,i.id).then(function(path){
-              if(path)setTimeout(function(){enviarEmailRelatorio(i.id);},1500);
-            });
-          });
-        }).catch(function(){});
-      }else{
-        PhotoStore.loadForInsp(i).then(function(){
-          var _htmlStr=_gerarHTMLStr(i.id);
-          if(!_htmlStr)return;
-          var _nomeArqFin='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
-          enviarParaDrive(i,_htmlStr,function(){
-            uploadHtmlToSupabase(_nomeArqFin,_htmlStr,i.id).then(function(path){
-              if(path)setTimeout(function(){enviarEmailRelatorio(i.id);},1500);
-            });
-          });
-        }).catch(function(){});
-      }
-    },800);
-  }
 });}
 
 /* ── Funções globais de protocolo ── */
@@ -3538,46 +3493,6 @@ function gerarTipoLbl(tipo){
   return                            'RITP — RELATÓRIO DE INSPEÇÃO TÉCNICA PROGRAMADA';
 }
 
-async function uploadHtmlToSupabase(fileName, htmlText, inspId){
-  if(!Sync.ready||!navigator.onLine)return null;
-  try{
-    /* ── Via Edge Function ── */
-    if(Sync.useEdge){
-      var _hUp={'Content-Type':'application/json'};if(SYNC_SECRET)_hUp['x-sync-secret']=SYNC_SECRET;
-      var resp=await fetch(EDGE_SYNC_URL+'/upload-report',{
-        method:'POST',
-        headers:_hUp,
-        body:JSON.stringify({fileName:fileName,htmlText:htmlText,inspId:inspId})
-      });
-      if(!resp.ok)throw new Error('Edge upload HTTP '+resp.status);
-      var d=await resp.json();
-      if(!d.ok)throw new Error(d.error||'Edge upload erro');
-      return d.path;
-    }
-    /* ── Fallback SDK ── */
-    if(!SB)return null;
-    var path='relatorios/'+inspId+'/'+fileName;
-    var blob=new Blob([htmlText],{type:'text/html;charset=utf-8'});
-    var up=await SB.storage.from('relatorios').upload(path,blob,{upsert:true,contentType:'text/html;charset=utf-8'});
-    if(up.error)throw up.error;
-    return path;
-  }catch(e){console.warn('Upload HTML falhou',e);return null;}
-}
-
-/* ── Dispara envio de e-mail via Edge Function send-report-email ── */
-async function enviarEmailRelatorio(inspId){
-  if(!navigator.onLine||!EDGE_EMAIL_URL)return;
-  try{
-    var resp=await fetch(EDGE_EMAIL_URL,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({inspId:inspId})
-    });
-    var d=await resp.json();
-    if(d.ok){Tt('\u2709\ufe0f E-mail enviado: '+((d.sentTo||[]).join(', ')));}
-    else{console.warn('send-report-email erro:',d.error);}
-  }catch(e){console.warn('Falha ao enviar e-mail:',e);}
-}
 function exportHTML(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
@@ -4007,7 +3922,7 @@ function _gerarHTMLStr(id){
     +'</body></html>';
   return html;
 }
-/* Abre janela de download + envia ao Drive + depois ao Supabase */
+/* Abre janela de download do relatório HTML */
 function _doExportHTML(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
   if(i.tipo==='subestacao'){exportHTMLSub(id);return;}
@@ -4019,183 +3934,8 @@ function _doExportHTML(id){
   var nomeArq='TJMG_'+i.tipo.toUpperCase()+'_'+i.edif.replace(/[^a-zA-Z0-9]/g,'_')+(i.os?'_'+i.os.replace(/[^a-zA-Z0-9]/g,'_'):'')+'_'+fdt(i.dtVistoria||i.data).replace(/\//g,'-')+'.html';
   a.download=nomeArq;
   a.click();
+  URL.revokeObjectURL(a.href);
   Tt('\u2705 Relatório exportado com sucesso!');
-  enviarParaDrive(i,html,function(){
-    Tt('\u2601\ufe0f Supabase: enviando relatório...');
-    uploadHtmlToSupabase(nomeArq,html,i.id).then(function(path){
-      if(path){
-        Tt('\u2705 Supabase: relatório salvo!');
-        setTimeout(function(){enviarEmailRelatorio(i.id);},1500);
-      }else{Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');}
-    });
-  });
-}
-
-/* ── Envia relatório HTML + fotos para o Google Drive via Apps Script ── */
-function enviarParaDrive(insp, htmlStr, onComplete){
-  if(!DRIVE_SCRIPT_URL){
-    /* Sem Drive configurado — vai direto para o Supabase */
-    if(typeof onComplete==='function')onComplete();
-    return;
-  }
-  try{
-    var protocolo=insp.protocolo||gerarProtocolo(insp);
-    var meta={
-      regiao:      insp.reg||'',
-      comarca:     insp.com||'',
-      edif:        insp.edif||'',
-      tipo:        insp.tipo||'',
-      protocolo:   protocolo,
-      dataVistoria:fdt(insp.dtVistoria||insp.data)
-    };
-
-    /* ── Envia via GET com no-cors + retry (v58) ──
-       Apps Script faz redirect interno google.com→googleusercontent.com
-       que quebra CORS no browser — no-cors é necessário aqui.
-       A garantia de entrega vem do trigger assíncrono no Apps Script:
-       se um chunk chegar corrompido, o _finalizarHTML loga o erro e
-       limpa as props (finally), sem deixar lixo acumulado.
-       Retry de 3x cobre falhas de rede passageiras. */
-    var CHUNK=1800;
-    var htmlB64=btoa(unescape(encodeURIComponent(htmlStr)));
-    var totalChunks=Math.ceil(htmlB64.length/CHUNK)||1;
-    var MAX_RETRY=3;
-
-    function _getComRetry(url,tentativa){
-      tentativa=tentativa||1;
-      return fetch(url,{method:'GET',mode:'no-cors'})
-        .catch(function(e){
-          if(tentativa<MAX_RETRY){
-            return new Promise(function(res){setTimeout(res,600*tentativa);})
-              .then(function(){return _getComRetry(url,tentativa+1);});
-          }
-          console.warn('[Drive] chunk falhou após '+MAX_RETRY+' tentativas:',e);
-        });
-    }
-
-    function enviarChunk(idx){
-      var parte=htmlB64.slice(idx*CHUNK,(idx+1)*CHUNK);
-      var url=DRIVE_SCRIPT_URL
-        +'?protocolo='+encodeURIComponent(protocolo)
-        +'&chunk='+idx
-        +'&total='+totalChunks
-        +'&parte='+encodeURIComponent(parte);
-      if(idx===0){
-        url+='&regiao='+encodeURIComponent(meta.regiao)
-          +'&comarca='+encodeURIComponent(meta.comarca)
-          +'&edif='+encodeURIComponent(meta.edif)
-          +'&tipo='+encodeURIComponent(meta.tipo)
-          +'&dataVistoria='+encodeURIComponent(meta.dataVistoria);
-        Tt('\u2601\ufe0f Drive: salvando '+meta.edif+' ('+totalChunks+' partes)...');
-      }
-      return _getComRetry(url);
-    }
-
-    var ci=0;
-    function proximoChunk(){
-      if(ci>=totalChunks){enviarFotos();return;}
-      enviarChunk(ci).then(function(){ci++;setTimeout(proximoChunk,250);});
-    }
-    proximoChunk();
-
-    /* ── Coleta fotos: itens normais + subestação (v58: sub adicionada) ── */
-    function _coletarFotos(){
-      var fotos=[];
-
-      /* Fotos de itens normais do checklist */
-      Object.keys(insp.itens||{}).forEach(function(k){
-        var it=insp.itens[k];
-        if(!it||!it.fotos||!it.fotos.length)return;
-        it.fotos.forEach(function(f,fi){
-          if(!f||!f.b64)return;
-          var nomeItem=(it.n||k).replace(/[^a-zA-Z0-9.]/g,'_');
-          fotos.push({nome:nomeItem+'_foto_'+(fi+1)+'.jpg',b64:f.b64});
-        });
-      });
-
-      /* Fotos de subestação (v58) */
-      var sub=insp.sub||{};
-      /* sub.chk — fotos por item */
-      Object.keys(sub.chk||{}).forEach(function(id){
-        var chkItem=sub.chk[id];
-        if(!chkItem||!chkItem.fotos||!chkItem.fotos.length)return;
-        chkItem.fotos.forEach(function(f,fi){
-          if(!f||!f.b64)return;
-          fotos.push({nome:'sub_chk_'+id.replace(/[^a-zA-Z0-9]/g,'_')+'_'+(fi+1)+'.jpg',b64:f.b64});
-        });
-      });
-      /* sub.trafos */
-      (sub.trafos||[]).forEach(function(t,ti){
-        [['fotos_ttr','ttr'],['fotos_iso','iso'],['fotos_ohm','ohm']].forEach(function(par){
-          (t[par[0]]||[]).forEach(function(f,fi){
-            if(!f||!f.b64)return;
-            fotos.push({nome:'sub_trafo'+(ti+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
-          });
-        });
-      });
-      /* sub.disjs */
-      (sub.disjs||[]).forEach(function(d,di){
-        [['fotos_iso','iso'],['fotos_cr','cr']].forEach(function(par){
-          (d[par[0]]||[]).forEach(function(f,fi){
-            if(!f||!f.b64)return;
-            fotos.push({nome:'sub_disj'+(di+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
-          });
-        });
-      });
-      /* sub.secc */
-      (sub.secc||[]).forEach(function(s,si){
-        [['fotos_iso','iso'],['fotos_cr','cr']].forEach(function(par){
-          (s[par[0]]||[]).forEach(function(f,fi){
-            if(!f||!f.b64)return;
-            fotos.push({nome:'sub_secc'+(si+1)+'_'+par[1]+'_'+(fi+1)+'.jpg',b64:f.b64});
-          });
-        });
-      });
-
-      return fotos;
-    }
-
-    /* ── Envia fotos em chunks sequenciais com retry (v58) ── */
-    function enviarFotos(){
-      var fotos=_coletarFotos();
-      if(!fotos.length){
-        Tt('\u2705 Drive: relatório salvo — '+protocolo);
-        if(typeof onComplete==='function')onComplete();
-        return;
-      }
-      var FCHUNK=1500;
-      var tarefas=[];
-      fotos.forEach(function(f){
-        var total=Math.ceil(f.b64.length/FCHUNK)||1;
-        for(var i=0;i<total;i++){
-          tarefas.push({nome:f.nome,protocolo:protocolo,chunk:i,total:total,parte:f.b64.slice(i*FCHUNK,(i+1)*FCHUNK)});
-        }
-      });
-      var fi=0;
-      function proximaFoto(){
-        if(fi>=tarefas.length){
-          Tt('\u2705 Drive: '+fotos.length+' foto(s) salva(s) — '+protocolo);
-          if(typeof onComplete==='function')onComplete();
-          return;
-        }
-        var t=tarefas[fi];
-        var url=DRIVE_SCRIPT_URL
-          +'?protocolo='+encodeURIComponent(t.protocolo)
-          +'&foto='+encodeURIComponent(t.nome)
-          +'&fchunk='+t.chunk
-          +'&ftotal='+t.total
-          +'&b64='+encodeURIComponent(t.parte);
-        _getComRetry(url).then(function(){fi++;setTimeout(proximaFoto,200);});
-      }
-      proximaFoto();
-    }
-
-  }catch(e){
-    console.warn('enviarParaDrive erro:',e);
-    Tt('\u26a0\ufe0f Drive: erro — '+((e&&e.message)||String(e)).slice(0,40));
-    /* Mesmo com erro no Drive, tenta enviar ao Supabase */
-    if(typeof onComplete==='function')onComplete();
-  }
 }
 
 function rAdm(){
@@ -6767,16 +6507,7 @@ function _doExportHTMLSub(id){
   var nomeArq='Sub_'+tipoSub+'_'+(insp.com||'').replace(/[^a-zA-Z0-9]/g,'_')+'_'+fdt(insp.data||Date.now()).replace(/\//g,'-')+'.html';
   a.download=nomeArq;
   a.click();URL.revokeObjectURL(a.href);
-  Tt('HTML exportado!');
-  enviarParaDrive(insp,html,function(){
-    Tt('\u2601\ufe0f Supabase: enviando relatório...');
-    uploadHtmlToSupabase(nomeArq,html,insp.id).then(function(path){
-      if(path){
-        Tt('\u2705 Supabase: relatório salvo!');
-        setTimeout(function(){enviarEmailRelatorio(insp.id);},1500);
-      }else{Tt('\u26a0\ufe0f Supabase: falha ao salvar relatório.');}
-    });
-  });
+  Tt('\u2705 HTML exportado com sucesso!');
 }
 
 function rFConc(c){
