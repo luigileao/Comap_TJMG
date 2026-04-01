@@ -28,12 +28,12 @@ var F={
 };
 
 
-var SUPABASE_URL='https://rrlhtnwdokqbtkwrlsfa.supabase.co';
-var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJybGh0bndkb2txYnRrd3Jsc2ZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDQ1NDcsImV4cCI6MjA5MDQ4MDU0N30.aT-XBqF8nFkyn8tfCpI8ptanDgSY_uhNkcowDFkrx-0';
+var SUPABASE_URL='https://mjhmadtkwwkufakplrrj.supabase.co';
+var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaG1hZHRrd3drdWZha3BscnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTQ5MTQsImV4cCI6MjA4OTYzMDkxNH0.njut4xTQCHtvbtzonCcUVdOSiAUwl_CKphEVfjAy_gc';
 var SUPABASE_PUBLISHABLE_KEY=SUPABASE_ANON_KEY; /* alias — sync.js usa este nome */
 /* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://rrlhtnwdokqbtkwrlsfa.supabase.co/functions/v1/tjmg-sync'; // v65
-var EDGE_EMAIL_URL='https://rrlhtnwdokqbtkwrlsfa.supabase.co/functions/v1/send-report-email'; // v65
+var EDGE_SYNC_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/tjmg-sync'; // v65
+var EDGE_EMAIL_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/send-report-email'; // v65
 /* Segredo compartilhado com a Edge Function (Supabase > Edge Functions > Secrets > SYNC_SECRET).
    Deixe vazio ('') para desabilitar a verificação (não recomendado em produção). */
 var SYNC_SECRET=''; /* ⚠ PRODUÇÃO: defina um segredo forte aqui e no Supabase Edge Function Secrets */
