@@ -1,15 +1,44 @@
-/* TJMG Fiscal — Service Worker v66
+/* TJMG Fiscal — Service Worker v71
    Estratégia:
-   - App shell (index.html, sw.js, manifest.json) → network-first, fallback cache
-   - Demais assets → cache-first, atualiza cache em background SEM clone bug
+   - App shell (index.html, sw.js, manifest.json, js/*.js) → network-first, fallback cache
+   - Demais assets → cache-first, atualiza cache em background
    - Domínios externos (Supabase, CDN, Google) → nunca interceptados
+
+   v71: Fase 4 da modularização — utils.js, router.js, auth.js ativados.
+        index.html: 4791 → 4470 linhas (−321 / −7%).
+        v68: Fase 3 — report-html.js extraído do index.html.
+        Funções removidas do index: exportHTML, _gerarHTMLStr, _doExportHTML,
+        exportHTMLSub, _gerarHTMLSubStr, _doExportHTMLSub, normProt,
+        gerarProtocolo, gerarTipoLbl, enviarParaDrive, uploadHtmlToSupabase,
+        enviarEmailRelatorio.
+        Melhorias: page-break corrigido para grades de fotos; relatório de
+        subestação redesenhado com identidade visual TJMG unificada.
+        index.html: 5663 → 4791 linhas (−872 / −15%).
 */
 
-const V = 'tjmg-v66';
+const V = 'tjmg-v71';
 const CACHE = [
   './',
   './index.html',
-  './manifest.json'
+  './manifest.json',
+  './favicon.ico',
+  './icon-192.png',
+  './icon-512.png',
+  /* ── Fase 1: módulos extraídos ── */
+  './config.js',
+  './data.js',
+  './state.js',
+  /* ── Fase 2: Sync, PhotoStore, DB ── */
+  './photo-store.js',
+  './sync.js',
+  './db.js',
+  /* ── Fase 3: geração de relatórios HTML ── */
+  './report-html.js',
+  './report-pdf.js',
+  /* ── Fase 4: utils, router, auth ── */
+  './utils.js',
+  './router.js',
+  './auth.js',
 ];
 
 const BYPASS = [
