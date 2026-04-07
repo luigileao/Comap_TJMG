@@ -104,6 +104,8 @@ var DB={
       }
       if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
       localStorage.setItem('tu',JSON.stringify(US));
+      /* v74 P1: verifica quota após save e alerta se necessário */
+      if(typeof checkStorageQuota==='function')checkStorageQuota();
     }catch(e){
       console.warn('Erro ao salvar local:',e);
       if(notifyUI)Tt('Erro ao salvar. Tente novamente.');

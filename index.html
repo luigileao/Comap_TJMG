@@ -679,33 +679,134 @@ function rPerf(){
   var R=REG[s.reg]||{l:s.reg||'',c:'#003580',bg:'#dbeafe'};
   var isSA=(window.navigator.standalone===true)||window.matchMedia('(display-mode:standalone)').matches;
   var _regBadge=_global
-    ?'<span class="bdg" style="background:#fef3c7;color:#d97706;">'+(s.tipo==='admin'?'🔑 Admin':'📋 Coordenador')+'</span>'
-    :'<span class="bdg" style="background:'+R.bg+';color:'+R.c+';">Região '+R.l+'</span>';
+    ?'<span class=\"bdg\" style=\"background:#fef3c7;color:#d97706;\">'+(s.tipo==='admin'?'🔑 Admin':'📋 Coordenador')+'</span>'
+    :'<span class=\"bdg\" style=\"background:'+R.bg+';color:'+R.c+';\">Região '+R.l+'</span>';
   var _contrato=_global
-    ?'<div class="card"><b style="color:#003580;">Nº:</b> CT 017/2026 (Global)<br><b style="color:#003580;">Acesso:</b> Global</div>'
-    :'<div class="card"><b style="color:#003580;">Nº:</b> '+(R.ct||'CT 017/2026')+'<br><b style="color:#003580;">Região:</b> '+R.l+'</div>';
-  var h='<div class="card" style="text-align:center;padding:20px;">'
-    +'<div class="av" style="width:64px;height:64px;font-size:22px;background:'+R.c+';margin:0 auto 10px;">'+ini(s.nome)+'</div>'
-    +'<div style="font-size:16px;font-weight:800;">'+s.nome+'</div>'
-    +'<div style="font-size:12px;color:#64748b;margin-top:3px;">'+s.cargo+'</div>'
-    +'<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;">'
+    ?'<div class=\"card\"><b style=\"color:#003580;\">Nº:</b> CT 017/2026 (Global)<br><b style=\"color:#003580;\">Acesso:</b> Global</div>'
+    :'<div class=\"card\"><b style=\"color:#003580;\">Nº:</b> '+(R.ct||'CT 017/2026')+'<br><b style=\"color:#003580;\">Região:</b> '+R.l+'</div>';
+  var _rasc=S.insp.filter(function(i){return i.st==='em_andamento';}).length;
+  var _fin=S.insp.filter(function(i){return i.st==='finalizada';}).length;
+  var h='<div class=\"card\" style=\"text-align:center;padding:20px;\">'
+    +'<div class=\"av\" style=\"width:64px;height:64px;font-size:22px;background:'+R.c+';margin:0 auto 10px;\">'+ini(s.nome)+'</div>'
+    +'<div style=\"font-size:16px;font-weight:800;\">'+s.nome+'</div>'
+    +'<div style=\"font-size:12px;color:#64748b;margin-top:3px;\">'+s.cargo+'</div>'
+    +'<div style=\"display:flex;gap:6px;justify-content:center;margin-top:8px;\">'
     +_regBadge
-    +'<span class="bdg" style="background:#dcfce7;color:#16a34a;">Ativo</span></div>'
-    +(s.mat?'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Mat. '+s.mat+'</div>':'')
-    +(s.polo?'<div style="font-size:11px;color:#64748b;margin-top:2px;">'+s.polo+'</div>':'')
+    +'<span class=\"bdg\" style=\"background:#dcfce7;color:#16a34a;\">Ativo</span></div>'
+    +(s.mat?'<div style=\"font-size:11px;color:#94a3b8;margin-top:8px;\">Mat. '+s.mat+'</div>':'')
+    +(s.polo?'<div style=\"font-size:11px;color:#64748b;margin-top:2px;\">'+s.polo+'</div>':'')
     +'</div>'
     +_contrato
-    /* Botão instalar Chrome — visível só se _installPrompt disponível e não instalado */
+    /* ── Monitor de Armazenamento P1 ── */
+    +'<div class=\"card\" style=\"padding:14px 16px;\">'
+    +'<div style=\"display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;\">'
+    +'<div style=\"font-size:12px;font-weight:800;color:#1e293b;\">💾 Armazenamento</div>'
+    +'<span id=\"storage-pct-badge\" style=\"font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#f1f5f9;color:#64748b;\">calculando...</span>'
+    +'</div>'
+    +'<div style=\"background:#f1f5f9;border-radius:6px;height:8px;overflow:hidden;margin-bottom:8px;\">'
+    +'<div id=\"storage-bar\" style=\"height:100%;background:#94a3b8;border-radius:6px;width:0%;transition:width .5s;\"></div>'
+    +'</div>'
+    +'<div id=\"storage-detail\" style=\"font-size:11px;color:#64748b;margin-bottom:10px;\">Verificando...</div>'
+    +'<div style=\"display:flex;gap:6px;margin-bottom:10px;\">'
+    +'<div style=\"flex:1;background:#f8fafc;border-radius:8px;padding:8px;text-align:center;\">'
+    +'<div style=\"font-size:15px;font-weight:800;color:#2563eb;\">'+_rasc+'</div>'
+    +'<div style=\"font-size:10px;color:#64748b;\">Rascunhos</div></div>'
+    +'<div style=\"flex:1;background:#f8fafc;border-radius:8px;padding:8px;text-align:center;\">'
+    +'<div style=\"font-size:15px;font-weight:800;color:#16a34a;\">'+_fin+'</div>'
+    +'<div style=\"font-size:10px;color:#64748b;\">Finalizados</div></div>'
+    +'</div>'
+    +(_fin>0?'<button class=\"btn\" style=\"background:#fff7ed;color:#d97706;border:1px solid #fed7aa;font-size:12px;margin-bottom:6px;\" onclick=\"liberarFotosExportadas()\">🗑️ Liberar fotos de relatórios finalizados</button>':'')
+    /* ── Botão Verificar Atualização ── */
+    +'<button onclick=\"verificarAtualizacao()\" style=\"width:100%;border:none;background:#f1f5f9;color:#003580;border-radius:10px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;\">'
+    +'🔄 Verificar atualização do sistema'
+    +'</button>'
+    +'</div>'
+    /* Botão instalar Chrome */
     +(isSA
-      ?'<div style="background:#dcfce7;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="font-size:22px;">✅</span><div><div style="font-size:12px;font-weight:700;color:#16a34a;">App instalado</div><div style="font-size:11px;color:#16a34a;">Rodando em modo app</div></div></div>'
-      :'<button id="btn-instalar" onclick="instalarApp()" style="display:'+((_installPrompt)?'flex':'none')+';width:100%;align-items:center;justify-content:center;gap:10px;background:#003580;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;">📲 Instalar App no Dispositivo</button>'
+      ?'<div style=\"background:#dcfce7;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:8px;\"><span style=\"font-size:22px;\">✅</span><div><div style=\"font-size:12px;font-weight:700;color:#16a34a;\">App instalado</div><div style=\"font-size:11px;color:#16a34a;\">Rodando em modo app</div></div></div>'
+      :'<button id=\"btn-instalar\" onclick=\"instalarApp()\" style=\"display:'+((_installPrompt)?'flex':'none')+';width:100%;align-items:center;justify-content:center;gap:10px;background:#003580;color:#fff;border:none;border-radius:12px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:8px;\">📲 Instalar App no Dispositivo</button>'
     )
-    +'<button class="btn boa" onclick="logout()">Trocar Técnico / Sair</button>'
-    +'<button class="btn" style="background:#fee2e2;color:#dc2626;" onclick="logout()">Sair – '+s.nome.split(' ')[0]+'</button>'
-    +'<div style="height:8px;"></div>';
+    +'<button class=\"btn boa\" onclick=\"logout()\">Trocar Técnico / Sair</button>'
+    +'<button class=\"btn\" style=\"background:#fee2e2;color:#dc2626;\" onclick=\"logout()\">Sair – '+s.nome.split(' ')[0]+'</button>'
+    +'<div style=\"height:8px;\"></div>';
   el('pbody').innerHTML=h;
+  atualizarMonitorArmazenamento();
 }
 
+/* ── Monitor de Armazenamento: preenche widget da tela Perfil ── */
+function atualizarMonitorArmazenamento(){
+  if(!navigator.storage||!navigator.storage.estimate){
+    var det=el('storage-detail');if(det)det.textContent='Estimativa não disponível neste navegador.';
+    return;
+  }
+  navigator.storage.estimate().then(function(est){
+    var usado=est.usage||0;var total=est.quota||0;
+    var pct=total>0?Math.round(usado/total*100):0;
+    var usadoMB=(usado/1048576).toFixed(1);
+    var totalStr=total>1073741824?((total/1073741824).toFixed(1)+' GB'):((total/1048576).toFixed(0)+' MB');
+    var cor=pct<50?'#16a34a':pct<80?'#d97706':'#dc2626';
+    var bgBadge=pct<50?'#dcfce7':pct<80?'#fef3c7':'#fee2e2';
+    var _bar=el('storage-bar');var _badge=el('storage-pct-badge');var _det=el('storage-detail');
+    if(_bar){_bar.style.width=Math.min(pct,100)+'%';_bar.style.background=cor;}
+    if(_badge){_badge.textContent=pct+'% usado';_badge.style.background=bgBadge;_badge.style.color=cor;}
+    if(_det){_det.innerHTML='<span style=\"font-weight:700;color:'+cor+';\">'+usadoMB+' MB</span> usados de '+totalStr+' disponíveis';}
+    S._storageEst={pct:pct,usadoMB:usadoMB,cor:cor};
+  }).catch(function(){});
+}
+
+/* ── P1: Alerta de quota após cada save ── */
+function checkStorageQuota(){
+  if(!navigator.storage||!navigator.storage.estimate)return;
+  navigator.storage.estimate().then(function(est){
+    var pct=est.quota>0?Math.round((est.usage||0)/est.quota*100):0;
+    S._storageEst=S._storageEst||{};S._storageEst.pct=pct;
+    if(pct>=90){
+      Tt('⛔ Armazenamento CRÍTICO ('+pct+'%) — Libere espaço em Perfil!');
+      S._storageAlertado=Date.now();
+    }else if(pct>=70&&(!S._storageAlertado||(Date.now()-S._storageAlertado)>1800000)){
+      Tt('⚠️ Armazenamento em '+pct+'% — libere espaço em Perfil');
+      S._storageAlertado=Date.now();
+    }
+  }).catch(function(){});
+}
+
+/* ── Verificar atualização manualmente (chamado pelo botão em Perfil) ── */
+function verificarAtualizacao(){
+  if(!_swReg){Tt('Service Worker não disponível');return;}
+  Tt('Verificando atualização...');
+  _swReg.update().then(function(){
+    if(_swReg.waiting){
+      _swAguardando=true;
+      _mostrarBannerAtualizacao();
+      Tt('Nova versão encontrada! Toque em "Atualizar agora" no topo.');
+    }else{
+      Tt('✅ Sistema já está na versão mais recente (v'+APP_VERSION+')');
+    }
+  }).catch(function(){Tt('Sem conexão — não foi possível verificar atualização.');});
+}
+
+/* ── Libera fotos de relatórios finalizados do IDB ── */
+function liberarFotosExportadas(){
+  cf('🗑️','Liberar fotos','Apagar fotos do dispositivo de todos os relatórios finalizados? Os dados textuais e relatórios gerados não são afetados.',function(){
+    var fins=S.insp.filter(function(i){return i.st==='finalizada';});
+    if(!fins.length){Tt('Nenhum relatório finalizado encontrado.');return;}
+    Promise.all(fins.map(function(insp){
+      var keys=Object.keys(insp.itens||{});
+      keys.forEach(function(k){if(insp.itens[k])insp.itens[k].fotos=[];});
+      var ps=keys.map(function(k){return PhotoStore.del(insp.id+'::'+k);});
+      if(insp.sub){
+        if(insp.sub.chk)Object.keys(insp.sub.chk).forEach(function(k){if(insp.sub.chk[k])insp.sub.chk[k].fotos=[];});
+        if(insp.sub.trafos)insp.sub.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
+        if(insp.sub.disjs)insp.sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
+        if(insp.sub.secc)insp.sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
+        ps.push(PhotoStore.del(insp.id+'::sub'));
+      }
+      return Promise.all(ps);
+    })).then(function(){
+      DB.sv();Tt('✅ Fotos de '+fins.length+' relatório(s) liberadas do dispositivo!');rPerf();
+    }).catch(function(){Tt('Erro ao liberar fotos. Tente novamente.');});
+  });
+}
 
 function rPCI(){
   var s=S.sessao;
@@ -902,8 +1003,7 @@ function ensureDraftItems(i){
         var _sel=!_hasAS||!!i.ativSel[a.id];
         i.itens[k]={s:_sel?'pendente':'nao_aplicavel',obs:'',fotos:[],mats:[],n:a.n,nm:a.nm,d:a.d,sk:s.id,sn:s.nm,snn:s.n};
       }else{
-        /* Migrar itens antigos marcados como fora_periodo → pendente */
-        if(i.itens[k].s==='fora_periodo')i.itens[k].s='pendente';
+        /* v74: fora_periodo é status válido — não reverter para pendente */
         if(!i.itens[k].n)i.itens[k].n=a.n;
         if(!i.itens[k].nm)i.itens[k].nm=a.nm;
         if(!i.itens[k].d)i.itens[k].d=a.d;
@@ -4029,23 +4129,60 @@ window.addEventListener('beforeunload',function(){saveRascunhoAuto(true);});
 document.addEventListener('visibilitychange',function(){if(document.hidden)saveRascunhoAuto(true);});
 
 if('serviceWorker' in navigator){
-  var _reloadingSW=false;
-  navigator.serviceWorker.addEventListener('controllerchange',function(){
-    if(_reloadingSW)return;
-    _reloadingSW=true;
-    location.reload();
-  });
+  /* v74: Atualização MANUAL — sem reload automático para não perder dados.
+     O SW novo fica em espera (waiting). O usuário atualiza via botão na tela de Perfil. */
+  var _swReg=null;
+  var _swAguardando=false;
   navigator.serviceWorker.register('./sw.js?v='+APP_VERSION).then(function(r){
-    if(r.update)r.update();
+    _swReg=r;
+    /* Detecta SW aguardando (nova versão já instalada, esperando ativação) */
+    function _checkWaiting(){
+      if(r.waiting){
+        _swAguardando=true;
+        _mostrarBannerAtualizacao();
+      }
+    }
+    _checkWaiting();
     r.addEventListener('updatefound',function(){
       var w=r.installing;
-      if(w)w.addEventListener('statechange',function(){
+      if(!w)return;
+      w.addEventListener('statechange',function(){
         if(w.state==='installed'&&navigator.serviceWorker.controller){
-          if(w.postMessage)w.postMessage({type:'SKIP_WAITING'});
+          _swAguardando=true;
+          _mostrarBannerAtualizacao();
         }
       });
     });
   }).catch(function(){});
+}
+
+function _mostrarBannerAtualizacao(){
+  /* Banner discreto no topo — não interrompe o fiscal */
+  var old=document.getElementById('sw-update-banner');if(old)return;
+  var b=document.createElement('div');
+  b.id='sw-update-banner';
+  b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#003580;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3);';
+  b.innerHTML='🔄 Nova versão disponível'
+    +'<button onclick="aplicarAtualizacaoSW()" style="background:#fff;color:#003580;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;">Atualizar agora</button>';
+  document.body.prepend(b);
+}
+
+function aplicarAtualizacaoSW(){
+  /* Salva rascunho antes de recarregar */
+  saveRascunhoAuto(true);
+  var banner=document.getElementById('sw-update-banner');if(banner)banner.textContent='Salvando e atualizando...';
+  setTimeout(function(){
+    if(_swReg&&_swReg.waiting){
+      /* Ouve controllerchange UMA vez e recarrega */
+      navigator.serviceWorker.addEventListener('controllerchange',function handler(){
+        navigator.serviceWorker.removeEventListener('controllerchange',handler);
+        location.reload();
+      });
+      _swReg.waiting.postMessage({type:'SKIP_WAITING'});
+    }else{
+      location.reload();
+    }
+  },800);/* Dá tempo ao saveRascunhoAuto síncrono completar */
 }
 
 /* ── Captura evento de instalação Chrome (Android / PC) ── */

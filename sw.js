@@ -16,7 +16,7 @@
         index.html: 5663 → 4791 linhas (−872 / −15%).
 */
 
-const V = 'tjmg-v73';
+const V = 'tjmg-v74';
 const CACHE = [
   './',
   './index.html',
@@ -61,7 +61,10 @@ self.addEventListener('install', function(e) {
       console.warn('[SW] install cache falhou:', err);
     })
   );
-  self.skipWaiting();
+  /* v74: NÃO chama skipWaiting() automaticamente.
+     O SW novo aguarda ativação manual pelo fiscal via botão "Atualizar agora".
+     Isso evita que uma atualização automática interrompa uma inspeção em andamento
+     e cause perda de dados ao recarregar a página sem aviso. */
 });
 
 /* ── Activate: limpa caches antigos ── */
