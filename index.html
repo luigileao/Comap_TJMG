@@ -72,12 +72,12 @@ input:focus,textarea:focus{border-color:var(--a);}
 .sec{font-size:13px;font-weight:800;color:var(--tx);}
 #toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(12px);background:#1e293b;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:600;z-index:999;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-#offbar{background:#f59e0b;color:#fff;text-align:center;padding:5px;font-size:11px;font-weight:700;display:none;flex-shrink:0;}
+#offbar{background:#f59e0b;color:#fff;text-align:center;padding:7px 12px;font-size:11px;font-weight:700;display:none;flex-shrink:0;z-index:100;position:relative;}
 </style>
 </head>
 <body>
 <div id="app">
-<div id="offbar">&#9888; Modo Offline - dados salvos localmente</div>
+<div id="offbar">📴 Modo Offline — dados salvos no dispositivo <span id="offbar-pending"></span><button onclick="if(navigator.onLine)syncManual()" style="background:rgba(255,255,255,.3);border:none;color:#fff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;margin-left:8px;" id="offbar-btn" style="display:none">Sincronizar</button></div>
 <div id="toast"></div>
 
 <div class="scr act" id="s-login" style="padding-top:var(--st)">
@@ -124,8 +124,10 @@ input:focus,textarea:focus{border-color:var(--a);}
       <div class="ht">&#128203; Coordenador</div>
       <div class="hs" id="coord-sub">Todos os Relatórios</div>
     </div>
+    <button id="btn-coord-sync" onclick="syncCoord()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:6px;">🔄 Sync</button>
     <button onclick="logout()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Sair</button>
   </div>
+  <div id="coord-sync-bar" style="display:flex;align-items:center;gap:8px;padding:7px 14px;background:#ede9fe;border-bottom:1px solid #c4b5fd;flex-shrink:0;"><span id="coord-net-dot" style="width:8px;height:8px;border-radius:50%;background:#94a3b8;flex-shrink:0;"></span><span id="coord-net-lbl" style="font-size:11px;color:#6d28d9;font-weight:700;">Verificando...</span><span style="flex:1;"></span><span id="coord-sync-ts" style="font-size:10px;color:#7c3aed;font-weight:600;"></span></div>
   <div style="display:flex;gap:8px;padding:10px 12px;background:#fff;border-bottom:1px solid var(--bo);flex-shrink:0;">
     <button style="flex:1;border:none;background:#dc2626;color:#fff;border-radius:10px;padding:9px 8px;font-size:11px;font-weight:700;cursor:pointer;" onclick="window.open('https://docs.google.com/forms/d/e/1FAIpQLSdFA3STupTnP3qFWX_3MXYhWXBl04VEBp4JbaPpfjIkT2QsDg/viewform','_blank')">⚡ OSE (abertura)</button>
     <button style="flex:1;border:none;background:#0f766e;color:#fff;border-radius:10px;padding:9px 8px;font-size:11px;font-weight:700;cursor:pointer;" onclick="iniciarF('osp')">📋 OSP (abertura)</button>
@@ -4146,10 +4148,51 @@ function salvarF(){
 }
 
 
-function updNet(){var on=navigator.onLine;var d=el('dot');var b=el('offbar');if(d){d.style.background=on?'#22c55e':'#f97316';d.textContent=on?'Online':'Offline';}if(b)b.style.display=on?'none':'block';}
-window.addEventListener('online',updNet);window.addEventListener('offline',updNet);
+function updNet(){
+  var on=navigator.onLine;
+  var d=el('dot');var b=el('offbar');
+  if(d){d.style.background=on?'#22c55e':'#f97316';d.textContent=on?'Online':'Offline';}
+  if(b){
+    b.style.display=on?'none':'flex';
+    b.style.alignItems='center';
+    b.style.justifyContent='center';
+    b.style.gap='8px';
+    /* Conta inspeções modificadas offline e mostra no banner */
+    var _pend=S.insp?S.insp.filter(function(i){return !i.synced_at&&i.updated_at;}).length:0;
+    var _sp=el('offbar-pending');
+    if(_sp&&_pend>0)_sp.textContent='('+_pend+' aguardando envio)';
+    else if(_sp)_sp.textContent='';
+    var _obtn=el('offbar-btn');
+    if(_obtn)_obtn.style.display=on?'inline':'none';
+  }
+  /* Propaga para barra do coordenador se visível */
+  if(typeof _coordAtualizarStatusBar==='function')_coordAtualizarStatusBar();
+}
+window.addEventListener('online',updNet);
+window.addEventListener('offline',function(){
+  updNet();
+  try{localStorage.setItem('_pendingPush','1');}catch(e){}
+  Tt('📴 Sem conexão — trabalhando offline. Dados salvos no dispositivo.');
+  /* Registra Background Sync para quando o sinal retornar */
+  if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+    navigator.serviceWorker.ready.then(function(reg){
+      if(reg.sync)reg.sync.register('tjmg-push').catch(function(){});
+    }).catch(function(){});
+  }
+});
 window.addEventListener('beforeunload',function(){saveRascunhoAuto(true);});
 document.addEventListener('visibilitychange',function(){if(document.hidden)saveRascunhoAuto(true);});
+
+/* v76: escuta mensagem do Service Worker para push em background */
+if(navigator.serviceWorker){
+  navigator.serviceWorker.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='BACKGROUND_SYNC_PUSH'){
+      if(Sync.ready&&navigator.onLine){
+        Sync.pullAll().then(function(){Sync.schedulePush(300);});
+      }
+    }
+  });
+}
 
 if('serviceWorker' in navigator){
   /* v74: Atualização MANUAL — sem reload automático para não perder dados.
@@ -4521,7 +4564,25 @@ async function bootApp(){
   }
   if(S.sessao){if(S.sessao.tipo==='admin'){rAdm();G('s-admin');}else if(S.sessao.tipo==='coordenador'){rCoord();G('s-coord');}else{rHome();G('s-home');}}
 }
-window.addEventListener('online',function(){updNet();if(Sync.ready)Sync.pullAll().then(function(){Sync.schedulePush(600);});});
+window.addEventListener('online',function(){
+  updNet();
+  /* Mostra notificação de reconexão */
+  Tt('🌐 Conexão restaurada! Sincronizando dados...');
+  if(!Sync.ready)return;
+  /* Pull primeiro → Push tudo que ficou pendente offline */
+  Sync.pullAll().then(function(){
+    Sync.schedulePush(400);
+    S._lastSync=Date.now();
+    try{localStorage.removeItem('_pendingPush');}catch(e){}
+    /* Atualiza UI na tela ativa */
+    var scr=activeScreenId();
+    if(scr==='s-home'&&typeof rHome==='function')setTimeout(rHome,1000);
+    if(scr==='s-coord'&&typeof rCoord==='function')setTimeout(rCoord,1000);
+    if(scr==='s-rel'&&typeof rRel==='function')setTimeout(rRel,1000);
+    updNet();
+    Tt('✅ Dados sincronizados com sucesso!');
+  }).catch(function(){Tt('⚠️ Falha na sincronização — tentando novamente em breve');});
+});
 /* Quando app volta ao foco (aba/PWA reativada), re-sincroniza para
    capturar deleções feitas por outros usuários da mesma região */
 var _lastVisSync=0;
@@ -4560,6 +4621,15 @@ setInterval(function(){
   }).catch(function(){S._syncBusy=false;});
 },1800000);
 bootApp();
+/* v76: Registra Periodic Background Sync se suportado (Chrome Android) */
+if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+  navigator.serviceWorker.ready.then(function(reg){
+    /* Periodic Sync: garante pull a cada 30min mesmo com app fechado */
+    if(reg.periodicSync){
+      reg.periodicSync.register('tjmg-periodic',{minInterval:1800000}).catch(function(){});
+    }
+  }).catch(function(){});
+}
 
 // ------------------------------------------------------------
 // DEBOUNCE nos inputs de busca — v64

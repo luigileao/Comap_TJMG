@@ -24,6 +24,10 @@ var Sync={
       this.useEdge=!!(typeof EDGE_SYNC_URL!=='undefined'&&EDGE_SYNC_URL);
       this.ready=this.useEdge||!!SB;
       this.loadState();
+      var _self=this;
+      if(this.ready&&navigator.onLine){
+        try{if(localStorage.getItem('_pendingPush')==='1'){setTimeout(function(){_self.schedulePush(2000);},3000);}}catch(e){}
+      }
       return this.ready;
     }catch(e){console.warn('Sync init falhou',e);return false;}
   },
@@ -62,7 +66,15 @@ var Sync={
   queueDeleteUser:function(id){if(!id)return; if(this.deletedUsers.indexOf(id)===-1)this.deletedUsers.push(id); this.saveState(); this.schedulePush(50);},
   schedulePush:function(delay){
     var self=this;
-    if(!self.ready||!navigator.onLine)return;
+    if(!self.ready||!navigator.onLine){
+      try{localStorage.setItem('_pendingPush','1');}catch(e){}
+      if(navigator.serviceWorker&&navigator.serviceWorker.ready){
+        navigator.serviceWorker.ready.then(function(reg){
+          if(reg.sync)reg.sync.register('tjmg-push').catch(function(){});
+        }).catch(function(){});
+      }
+      return;
+    }
     clearTimeout(self.timer);
     self.timer=setTimeout(function(){self.pushAll();},delay||800);
   },
@@ -470,6 +482,7 @@ var Sync={
     try{
       await this.pushUsers();
       await this.pushInspections();
+      try{localStorage.removeItem('_pendingPush');}catch(e){}
       var d=el('dot');
       if(d&&navigator.onLine){d.style.background='#22c55e';d.textContent='Sync OK';setTimeout(function(){updNet();},1200);}
     }catch(e){

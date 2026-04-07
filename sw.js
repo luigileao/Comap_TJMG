@@ -16,7 +16,7 @@
         index.html: 5663 → 4791 linhas (−872 / −15%).
 */
 
-const V = 'tjmg-v75';
+const V = 'tjmg-v76';
 const CACHE = [
   './',
   './index.html',
@@ -151,4 +151,32 @@ self.addEventListener('fetch', function(e) {
       });
     })
   );
+});
+
+/* ── Background Sync — v76 ───────────────────────────────────────────────
+   Disparado pelo SO quando o sinal retorna, mesmo com o app em background.
+   Avisa todos os clientes abertos para fazer o push. */
+self.addEventListener('sync', function(e) {
+  if(e.tag === 'tjmg-push') {
+    e.waitUntil(
+      self.clients.matchAll({type:'window', includeUncontrolled:true}).then(function(clients) {
+        if(clients.length) {
+          clients.forEach(function(c) { c.postMessage({type:'BACKGROUND_SYNC_PUSH'}); });
+        }
+        /* Se não há cliente aberto: agenda retry quando abrir */
+        return Promise.resolve();
+      })
+    );
+  }
+});
+
+/* ── Periodic Background Sync (onde suportado) ── */
+self.addEventListener('periodicsync', function(e) {
+  if(e.tag === 'tjmg-periodic') {
+    e.waitUntil(
+      self.clients.matchAll({type:'window'}).then(function(clients) {
+        clients.forEach(function(c) { c.postMessage({type:'BACKGROUND_SYNC_PUSH'}); });
+      })
+    );
+  }
 });

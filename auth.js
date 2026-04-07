@@ -1,3 +1,42 @@
+/* ── v76: Botão sync no header do coordenador ── */
+var _coordSyncBusy=false;
+async function syncCoord(){
+  var btn=document.getElementById('btn-coord-sync');
+  if(_coordSyncBusy){Tt('☁️ Já sincronizando...');return;}
+  if(!navigator.onLine){Tt('⚠️ Sem conexão');if(typeof _coordAtualizarStatusBar==='function')_coordAtualizarStatusBar();return;}
+  if(!Sync.ready){Tt('Sync não configurado');return;}
+  _coordSyncBusy=true;
+  if(btn){btn.disabled=true;btn.textContent='⏳';}
+  if(typeof _coordAtualizarStatusBar==='function')_coordAtualizarStatusBar('sincronizando');
+  Tt('☁️ Buscando dados de todas as regiões...');
+  try{
+    await Sync.pullAll();
+    await new Promise(function(r){Sync.schedulePush(200);setTimeout(r,1000);});
+    S._lastSync=Date.now();S._lastSyncCoord=Date.now();
+    localStorage.setItem('_lastSyncCoord',String(S._lastSyncCoord));
+    try{localStorage.removeItem('_pendingPush');}catch(e){}
+    DB.sv();
+    var _fin=S.insp.filter(function(i){return i.st==='finalizada';}).length;
+    var _rasc=S.insp.filter(function(i){return i.st==='em_andamento';}).length;
+    Tt('✅ '+_fin+' enviado(s), '+_rasc+' rascunho(s) — '+S.insp.length+' total');
+    rCoord();
+  }catch(e){Tt('⚠️ Erro: '+(e&&e.message?e.message:'falha de rede'));}
+  finally{_coordSyncBusy=false;if(btn){btn.disabled=false;btn.textContent='🔄 Sync';}if(typeof _coordAtualizarStatusBar==='function')_coordAtualizarStatusBar();}
+}
+function _coordAtualizarStatusBar(estado){
+  var dot=document.getElementById('coord-net-dot');
+  var lbl=document.getElementById('coord-net-lbl');
+  var ts=document.getElementById('coord-sync-ts');
+  if(!dot||!lbl)return;
+  var online=navigator.onLine;
+  if(estado==='sincronizando'){dot.style.background='#f59e0b';lbl.textContent='Sincronizando...';}
+  else if(online){dot.style.background='#16a34a';lbl.textContent='Online';}
+  else{dot.style.background='#dc2626';lbl.textContent='Offline — dados salvos localmente';}
+  if(ts){var _lsc=S._lastSyncCoord||parseInt(localStorage.getItem('_lastSyncCoord')||'0');
+    if(!_lsc)ts.textContent='Nunca sincronizado';
+    else{var d=Math.round((Date.now()-_lsc)/60000);ts.textContent=d<1?'Sync: agora':d<60?'Sync: '+d+'min atrás':'Sync: '+Math.round(d/60)+'h atrás';}}
+}
+
 'use strict';
 // ============================================================
 function _escA(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -70,6 +109,7 @@ function loginCoord(){
   if(u===COORD.u&&p===COORD.p){
     S.sessao={tipo:'coordenador',userId:'coord',nome:'Coordenador',reg:null,cargo:'Coordenador',polo:'',_t:Date.now()};
     DB.sv();cm('m-coord');rCoord();G('s-coord');
+    setTimeout(function(){if(navigator.onLine&&Sync.ready&&typeof syncCoord==='function')syncCoord();},800);
   } else el('ce').textContent='Usuário ou PIN incorretos.';
 }
 function rCoord(){
@@ -254,6 +294,7 @@ window.logout         = logout;
 window.openCoord      = openCoord;
 window.loginCoord     = loginCoord;
 window.rCoord         = rCoord;
+window.syncCoord       = syncCoord;
 window.coordToggleSel = coordToggleSel;
 window.coordSelAll    = coordSelAll;
 window.coordExpSel    = coordExpSel;
