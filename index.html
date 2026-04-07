@@ -280,10 +280,10 @@ input:focus,textarea:focus{border-color:var(--a);}
       <div class="lbl" style="margin-bottom:0;">📷 Fotos</div>
       <div style="display:flex;gap:6px;">
         <label style="background:#003580;color:#fff;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">
-          📸 Câmera<input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="addItemPhoto(this)">
+          📸 Câmera<input type="file" accept="image/*" capture="environment" multiple style="display:none;" onchange="addItemPhoto(this,true)">
         </label>
         <label style="background:#7c3aed;color:#fff;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;">
-          🖼️ Galeria<input type="file" accept="image/*" multiple style="display:none;" onchange="addItemPhoto(this)">
+          🖼️ Galeria<input type="file" accept="image/*" multiple style="display:none;" onchange="addItemPhoto(this,false)">
         </label>
       </div>
     </div>
@@ -1005,6 +1005,15 @@ function retomarF(id){
       F=JSON.parse(JSON.stringify(i.snap));
     }catch(e){F=i.snap;}
     F._editando=false;
+    /* FIX v73: O snap salvo no IDB/localStorage tem fotos zeradas (para evitar QuotaExceeded).
+       As fotos reais foram carregadas em S.insp[x].itens[k].fotos pelo PhotoStore.loadForInsp().
+       Precisamos transferi-las de volta para F.itens para que o modal de item exiba as fotos. */
+    Object.keys(F.itens||{}).forEach(function(k){
+      var loadedFotos=(i.itens[k]&&i.itens[k].fotos)||[];
+      if(loadedFotos.length){
+        F.itens[k].fotos=JSON.parse(JSON.stringify(loadedFotos));
+      }
+    });
   }else{
     ensureDraftItems(i);
     F={tipo:i.tipo,et:0,id:i.id,ets:t.e,
@@ -1266,7 +1275,7 @@ function renderItemPhotos(){
   }).join('');
 }
 
-function addItemPhoto(inp){
+function addItemPhoto(inp,saveGallery){
   if(!inp.files||!inp.files.length)return;
   var files=Array.from(inp.files);var done=0;var total=files.length;
   /* Barra de progresso — cria/atualiza elemento fixo no topo do modal */
@@ -1302,6 +1311,16 @@ function addItemPhoto(inp){
         var ctx=cv.getContext('2d');ctx.drawImage(img,0,0,w,h);
         var b64=cv.toDataURL('image/jpeg',0.72);
         _ifotos.push({id:uid(),b64:b64,leg:''});
+        /* FIX v73: salva foto na galeria do celular quando capturada pela câmera */
+        if(saveGallery){
+          try{
+            var _a=document.createElement('a');
+            _a.href=b64;
+            _a.download='TJMG_'+new Date().toISOString().slice(0,10)+'_'+uid().slice(0,6)+'.jpg';
+            document.body.appendChild(_a);_a.click();
+            setTimeout(function(){try{document.body.removeChild(_a);}catch(e){}},300);
+          }catch(_ge){console.warn('[addItemPhoto] save-gallery err:',_ge);}
+        }
         _atualizarBar();
       };
       img.src=e.target.result;
@@ -1414,10 +1433,16 @@ function saveItem(){
   var obs=el('iob').value;
   var fotosClone=JSON.parse(JSON.stringify(_ifotos));
   var matsClone=JSON.parse(JSON.stringify(_imats));
+  /* FIX v73: captura o status atual do item (definido por setISt ou mantido do carregamento).
+     Para modo form: F.itens[_ekey].s já foi setado por setISt(). Garantimos aqui que
+     obs/fotos/mats não sobrescrevem acidentalmente o status com undefined. */
   if(_eMode==='form'){
+    var _curSt=F.itens[_ekey]?F.itens[_ekey].s:undefined;
     F.itens[_ekey].obs=obs;
     F.itens[_ekey].fotos=fotosClone;
     F.itens[_ekey].mats=matsClone;
+    /* Restaura status explicitamente caso tenha sido perdido */
+    if(_curSt!==undefined)F.itens[_ekey].s=_curSt;
     /* Persiste fotos do form draft no IndexedDB */
     PhotoStore.put('form::'+_ekey,fotosClone);
     syncDraftFromF(true);
@@ -3876,6 +3901,11 @@ function editarRelatorio(id){
   var sess=S.sessao||{};
   if(i.snap){
     try{F=JSON.parse(JSON.stringify(i.snap));}catch(e){F=i.snap;}
+    /* FIX v73: restaura fotos reais do IDB (snap tem fotos zeradas) */
+    Object.keys(F.itens||{}).forEach(function(k){
+      var loadedFotos=(i.itens[k]&&i.itens[k].fotos)||[];
+      if(loadedFotos.length){F.itens[k].fotos=JSON.parse(JSON.stringify(loadedFotos));}
+    });
   }else{
     ensureDraftItems(i);
     F={tipo:i.tipo,et:0,id:i.id,ets:t.e,

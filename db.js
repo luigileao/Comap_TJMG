@@ -22,7 +22,9 @@ function saveRascunhoAuto(force){
     var snap=JSON.stringify(F);
     if(!force&&snap===autoSaveLastHash)return false;
     syncDraftFromF(false);
-    DB.sv();
+    /* FIX v73: beforeunload/visibilitychange precisam de save SÍNCRONO
+       pois o setTimeout de DB.sv() pode não disparar antes do unload */
+    if(force){DB.svSync();}else{DB.sv();}
     var _asEl=el('autosave-ind');if(_asEl){var _now=new Date();_asEl.textContent='Salvo '+_now.getHours().toString().padStart(2,'0')+':'+_now.getMinutes().toString().padStart(2,'0');}
     autoSaveLastHash=snap;
     autoSaveLastAt=Date.now();
@@ -39,58 +41,81 @@ function stopAutoSave(){
 
 /* ── PhotoStore: IndexedDB para fotos (ilimitado, offline) ──────────────── */
 var DB={
-  svLocal:function(){
-    setTimeout(function(){
-      try{
-        /* Salva fotos no IndexedDB e remove base64 do objeto antes do localStorage */
-        var inspSemFotos=S.insp.map(function(insp){
-          var clone=JSON.parse(JSON.stringify(insp));
-          Object.keys(clone.itens||{}).forEach(function(k){
-            var fotos=clone.itens[k].fotos||[];
-            if(fotos.length){
-              PhotoStore.put(insp.id+'::'+k,fotos);
-              clone.itens[k].fotos=[];
-            }
-          });
-          return clone;
-        });
-        /* Também move fotos de Subestação para o IndexedDB */
-        inspSemFotos.forEach(function(clone,idx){
-          var orig=S.insp[idx];
-          if(!clone.sub)return;
-          /* Remove fotos do sub no clone (localStorage) */
-          PhotoStore.putSubAll(clone.id,orig.sub||{});
-          if(clone.sub.chk)Object.keys(clone.sub.chk).forEach(function(k){clone.sub.chk[k].fotos=[];});
-          if(clone.sub.trafos)clone.sub.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
-          if(clone.sub.disjs)clone.sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
-          if(clone.sub.secc)clone.sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
-        });
-        /* ── Persiste S.insp no IndexedDB (sem limite de quota) ── */
-        PhotoStore.putAllInsp(inspSemFotos);
-        /* ── Tenta também no localStorage (boot rápido); tolera quota cheia ── */
-        try{
-          localStorage.setItem('ti',JSON.stringify(inspSemFotos));
-        }catch(qe){
-          if(qe.name==='QuotaExceededError'||qe.code===22){
-            console.warn('[DB] localStorage quota excedida — IDB é a fonte primária');
-            localStorage.removeItem('ti');/* limpa dado obsoleto */
-            Tt('Dados salvos com segurança ✓');
-          }else{
-            console.warn('Erro ao salvar local:',qe);
-            Tt('Erro ao salvar. Tente novamente.');
-          }
-        }
-        if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
-        localStorage.setItem('tu',JSON.stringify(US));
-      }catch(e){
-        console.warn('Erro ao salvar local:',e);
-        Tt('Erro ao salvar. Tente novamente.');
-      }
-    },0);
+  /* ── FIX v73: Helper interno para remover fotos de um clone de inspeção ──
+     Remove base64 de itens, snap.itens e sub/snap.sub para evitar
+     QuotaExceededError no localStorage (BUG PRINCIPAL de perda de dados) */
+  _stripFotos:function(clone,orig){
+    /* 1) Itens principais */
+    Object.keys(clone.itens||{}).forEach(function(k){
+      var item=clone.itens[k];if(!item)return;
+      var fotos=item.fotos||[];
+      if(fotos.length&&orig){PhotoStore.put(orig.id+'::'+k,fotos);}
+      item.fotos=[];
+    });
+    /* 2) FIX CRÍTICO: snap.itens também contém fotos — causa QuotaExceededError!
+       O snap é o estado serializado do formulário (F) que inclui fotos completas.
+       Ao salvar no localStorage, as fotos do snap inflam o JSON e causam quota cheia,
+       o que aciona localStorage.removeItem('ti') e apaga TODOS os dados. */
+    if(clone.snap&&clone.snap.itens){
+      Object.keys(clone.snap.itens).forEach(function(k){
+        var it=clone.snap.itens[k];if(it)it.fotos=[];
+      });
+    }
+    /* 3) Sub principal */
+    if(clone.sub){
+      if(orig)PhotoStore.putSubAll(clone.id,orig.sub||{});
+      if(clone.sub.chk)Object.keys(clone.sub.chk).forEach(function(k){if(clone.sub.chk[k])clone.sub.chk[k].fotos=[];});
+      if(clone.sub.trafos)clone.sub.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
+      if(clone.sub.disjs)clone.sub.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
+      if(clone.sub.secc)clone.sub.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
+    }
+    /* 4) FIX CRÍTICO: snap.sub também pode ter fotos (mesmo problema do snap.itens) */
+    if(clone.snap&&clone.snap.sub){
+      var ss=clone.snap.sub;
+      if(ss.chk)Object.keys(ss.chk).forEach(function(k){if(ss.chk[k])ss.chk[k].fotos=[];});
+      if(ss.trafos)ss.trafos.forEach(function(t){t.fotos_ttr=[];t.fotos_iso=[];t.fotos_ohm=[];});
+      if(ss.disjs)ss.disjs.forEach(function(d){d.fotos_iso=[];d.fotos_cr=[];});
+      if(ss.secc)ss.secc.forEach(function(s){s.fotos_iso=[];s.fotos_cr=[];});
+    }
+    return clone;
   },
+  /* ── Núcleo do save: pode rodar síncrono (force=true) ou via setTimeout ── */
+  _execSv:function(notifyUI){
+    var self=this;
+    try{
+      var inspSemFotos=S.insp.map(function(insp){
+        var clone=JSON.parse(JSON.stringify(insp));
+        return self._stripFotos(clone,insp);
+      });
+      /* Persiste no IDB (sem limite de quota) */
+      PhotoStore.putAllInsp(inspSemFotos);
+      /* Tenta localStorage (boot rápido); tolera quota cheia */
+      try{
+        localStorage.setItem('ti',JSON.stringify(inspSemFotos));
+      }catch(qe){
+        if(qe.name==='QuotaExceededError'||qe.code===22){
+          console.warn('[DB] localStorage quota excedida — IDB é a fonte primária');
+          localStorage.removeItem('ti');
+          if(notifyUI)Tt('Dados salvos no IDB ✓');
+        }else{
+          console.warn('Erro ao salvar local:',qe);
+          if(notifyUI)Tt('Erro ao salvar. Tente novamente.');
+        }
+      }
+      if(S.sessao){var s=JSON.parse(JSON.stringify(S.sessao));s._t=Date.now();localStorage.setItem('ts',JSON.stringify(s));}
+      localStorage.setItem('tu',JSON.stringify(US));
+    }catch(e){
+      console.warn('Erro ao salvar local:',e);
+      if(notifyUI)Tt('Erro ao salvar. Tente novamente.');
+    }
+  },
+  /* save assíncrono (normal — não bloqueia UI) */
+  svLocal:function(){var self=this;setTimeout(function(){self._execSv(true);},0);},
+  /* FIX v73: save SÍNCRONO para beforeunload/visibilitychange
+     (setTimeout não dispara antes do unload → dados perdidos) */
+  svSync:function(){this._execSv(false);},
   sv:function(){
     this.svLocal();
-    /* updated_at marcado individualmente em cada operação */
     Sync.schedulePush(600);
   },
   ld:async function(){
