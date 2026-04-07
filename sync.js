@@ -266,7 +266,18 @@ var Sync={
               if(rf.length&&!_fotosLocais[k])_fotosRemotasParaIDB[k]=rf;
             });
           }
+          /* v75 PROTEÇÃO CRÍTICA: nunca rebaixar st de finalizada→em_andamento via sync.
+             O Supabase pode ter versão mais antiga (push não completou, push offline).
+             A finalização local É a verdade — o servidor confirma depois, nunca antes. */
+          var _stLocal=local.st;
+          var _protLocal=local.protocolo;
+          var _finTimestamp=local._finalizadoEm;
           Object.keys(remote).forEach(function(k){local[k]=remote[k];});
+          if(_stLocal==='finalizada'){
+            local.st='finalizada';
+            if(_protLocal)local.protocolo=_protLocal;
+            if(_finTimestamp)local._finalizadoEm=_finTimestamp;
+          }
           /* Restaura fotos locais (têm prioridade sobre thumbs) */
           Object.keys(_fotosLocais).forEach(function(k){
             if(local.itens&&local.itens[k])local.itens[k].fotos=_fotosLocais[k];

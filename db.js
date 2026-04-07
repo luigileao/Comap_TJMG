@@ -160,6 +160,33 @@ var DB={
         console.log('[DB] Recuperado '+idbInsp.length+' insp. do IDB (localStorage vazio)');
       }
     }
+    /* v75: recupera finalizadas do cofre fin_store e mescla com insp_store.
+       Garante que relatórios finalizados nunca são perdidos por corrupção
+       do localStorage ou insp_store. */
+    try{
+      var _finsCofre=await PhotoStore.getAllFinalizados();
+      if(_finsCofre&&_finsCofre.length){
+        var _base=rawInsp?JSON.parse(rawInsp):[];
+        var _idxById={};_base.forEach(function(x,i){_idxById[x.id]=i;});
+        var _changed=false;
+        _finsCofre.forEach(function(f){
+          var idx=_idxById[f.id];
+          if(idx!==undefined){
+            /* Cofre prevalece sobre rascunho — nunca deixa finalizada virar rascunho */
+            if(_base[idx].st!=='finalizada'){
+              f.itens=_base[idx].itens||f.itens;/* preserva itens do insp_store (mais completo) */
+              f.st='finalizada';
+              _base[idx]=f;_changed=true;
+            }
+          }else{
+            /* Finalizada existia no cofre mas sumiu do insp_store — restaura */
+            _base.unshift(f);_changed=true;
+            console.log('[DB] Restaurado do fin_store:',f.id);
+          }
+        });
+        if(_changed)rawInsp=JSON.stringify(_base);
+      }
+    }catch(_fc){console.warn('[DB] fin_store recovery erro:',_fc);}
     if(rawInsp){S.insp=JSON.parse(rawInsp);
     var _temAntigas=S.insp.some(function(insp){return Object.keys(insp.itens||{}).some(function(k){return(insp.itens[k].fotos||[]).length>0;});});
     if(_temAntigas){PhotoStore.migrate(S.insp).then(function(){DB.svLocal();console.log('[PhotoStore] Migracao concluida.');});}

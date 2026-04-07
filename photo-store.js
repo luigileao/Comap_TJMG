@@ -6,7 +6,7 @@
 // ============================================================
 
 var PhotoStore=(function(){
-  var DB_NAME='tjmg_fotos',DB_VER=2,STORE='fotos',INSP_STORE='insp_store';
+  var DB_NAME='tjmg_fotos',DB_VER=3,STORE='fotos',INSP_STORE='insp_store';
   var _db=null;
   function open(){
     return new Promise(function(res,rej){
@@ -16,11 +16,28 @@ var PhotoStore=(function(){
         var db=e.target.result;
         if(!db.objectStoreNames.contains(STORE))
           db.createObjectStore(STORE,{keyPath:'id'});
-        /* v2: store para persistir S.insp sem limite de quota */
         if(!db.objectStoreNames.contains(INSP_STORE))
           db.createObjectStore(INSP_STORE,{keyPath:'k'});
+        /* v75: cofre exclusivo de relatórios FINALIZADOS — nunca apagado por quota/sync/reload */
+        if(!db.objectStoreNames.contains('fin_store'))
+          db.createObjectStore('fin_store',{keyPath:'id'});
       };
-      req.onsuccess=function(e){_db=e.target.result;res(_db);};
+      req.onsuccess=function(e){
+        _db=e.target.result;
+        res(_db);
+        /* v75: solicita armazenamento PERSISTENTE ao SO.
+           Sem isso, Chrome Android pode apagar o IDB quando o espaço fica baixo.
+           Com persist() concedido, só é apagado se o usuário limpar dados manualmente. */
+        if(navigator.storage&&navigator.storage.persist){
+          navigator.storage.persisted().then(function(ja){
+            if(!ja){
+              navigator.storage.persist().then(function(ok){
+                console.log('[IDB] Armazenamento persistente:'+(ok?'CONCEDIDO ✓':'negado — dados sujeitos a evicção'));
+              });
+            }
+          });
+        }
+      };
       req.onerror=function(){rej(req.error);};
     });
   }
@@ -158,7 +175,49 @@ var PhotoStore=(function(){
       });
     }).catch(function(){return null;});
   }
-  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp,putSubAll:putSubAll,loadSubAll:loadSubAll,putAllInsp:putAllInsp,getAllInsp:getAllInsp};
+
+  /* ── v75: Cofre imutável para relatórios FINALIZADOS ────────────────────────
+     Gravado em finalizarI() e salvarF(). Nunca sobrescrito por sync ou reload.
+     Fonte de recuperação quando insp_store/localStorage são corrompidos.       */
+  function putFinalizado(insp){
+    if(!insp||insp.st!=='finalizada')return Promise.resolve();
+    /* Remove fotos base64 antes de guardar (fotos ficam em STORE por chave) */
+    var safe=JSON.parse(JSON.stringify(insp));
+    Object.keys(safe.itens||{}).forEach(function(k){if(safe.itens[k])safe.itens[k].fotos=[];});
+    if(safe.snap&&safe.snap.itens)Object.keys(safe.snap.itens).forEach(function(k){if(safe.snap.itens[k])safe.snap.itens[k].fotos=[];});
+    return open().then(function(db){
+      return new Promise(function(res){
+        try{
+          var tx=db.transaction('fin_store','readwrite');
+          tx.objectStore('fin_store').put(safe);
+          tx.oncomplete=function(){res(true);};
+          tx.onerror=function(){console.warn('[fin_store] put erro',tx.error);res(false);};
+        }catch(e){console.warn('[fin_store] put ex',e);res(false);}
+      });
+    }).catch(function(){return false;});
+  }
+  function getAllFinalizados(){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction('fin_store','readonly');
+        var req=tx.objectStore('fin_store').getAll();
+        req.onsuccess=function(){res(req.result||[]);};
+        req.onerror=function(){res([]);};
+      });
+    }).catch(function(){return [];});
+  }
+  function delFinalizado(id){
+    return open().then(function(db){
+      return new Promise(function(res){
+        var tx=db.transaction('fin_store','readwrite');
+        tx.objectStore('fin_store').delete(id);
+        tx.oncomplete=function(){res();};
+        tx.onerror=function(){res();};
+      });
+    }).catch(function(){return Promise.resolve();});
+  }
+
+  return{put:put,get:get,del:del,listKeys:listKeys,migrate:migrate,loadForInsp:loadForInsp,delInsp:delInsp,putSubAll:putSubAll,loadSubAll:loadSubAll,putAllInsp:putAllInsp,getAllInsp:getAllInsp,putFinalizado:putFinalizado,getAllFinalizados:getAllFinalizados,delFinalizado:delFinalizado};
 })();
 
 

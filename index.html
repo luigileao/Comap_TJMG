@@ -486,7 +486,9 @@ function rHome(){
       if(atv.length){h+='<div class="pb" style="margin-top:5px;"><div class="pf" style="width:'+pct+'%;background:'+t.c+';"></div></div><div style="font-size:10px;color:#64748b;">'+fet.length+'/'+atv.length+' itens</div>';}
       else{h+='<div style="font-size:10px;color:#64748b;">'+fdth(i.data)+'</div>';}
       h+='</div></div><div style="display:flex;gap:6px;">'
-        +'<button class="btn br" style="flex:1;padding:8px;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
+        +(i.st==='em_andamento'
+          ?'<button class="btn br" style="flex:1;padding:8px;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
+          :'<button class="btn" style="flex:1;padding:8px;font-size:11px;background:#0f766e;color:#fff;" onclick="openDet(\''+i.id+'\')">Ver relatório</button>')
         +(canDelInsp(i)?'<button onclick="cf(\'X\',\'Excluir\',\'Excluir?\',(function(xid){return function(){var _dkeys=Object.keys((S.insp.find(function(x){return x.id===xid;})||{itens:{}}).itens||{});S.insp=S.insp.filter(function(x){return x.id!==xid;});PhotoStore.delInsp(xid,_dkeys);Sync.queueDeleteInspection(xid);DB.sv();rHome();};})(\'' +i.id+ '\'))" style="background:#f1f5f9;border:none;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer;">X</button>':'')
         +'</div></div>';
     });
@@ -1570,7 +1572,18 @@ function saveItem(){
 function finalizarI(id){cf('OK','Finalizar','Marcar como finalizada?',function(){
   stopAutoSave(); // v69-fix: para o timer antes de sair do formulário
   var i=S.insp.find(function(x){return x.id===id;});
-  if(i){i.st='finalizada';i.updated_at=new Date().toISOString();if(!i.protocolo)i.protocolo=gerarProtocolo(i);DB.sv();}
+  if(i){
+    i.st='finalizada';
+    i.updated_at=new Date().toISOString();
+    i._finalizadoEm=i.updated_at; /* timestamp imutável de finalização */
+    if(!i.protocolo)i.protocolo=gerarProtocolo(i);
+    /* v75: SÍNCRONO — garante gravação antes de qualquer navegação ou reload.
+       DB.sv() usa setTimeout(0) que pode não disparar antes do unload. */
+    DB.svSync();
+    /* v75: grava no cofre fin_store (IndexedDB dedicado, persistente, imutável).
+       Fonte de recuperação se localStorage/insp_store forem corrompidos. */
+    PhotoStore.putFinalizado(JSON.parse(JSON.stringify(i)));
+  }
   var _prot=i&&i.protocolo?i.protocolo:'';
   el('st').textContent='Relatório Finalizado!';
   el('ss').innerHTML=(i&&i.edif?'<strong>'+i.edif+'</strong>':'Inspeção')+' salvo com sucesso.'+(_prot?'<br><span style="font-family:monospace;font-size:12px;background:#f1f5f9;padding:4px 10px;border-radius:8px;display:inline-block;margin-top:10px;color:#003580;font-weight:700;">'+_prot+'</span>':'');
@@ -1656,7 +1669,7 @@ function rAdm(){
         +'<span class="bdg" style="background:'+t.bg+';color:'+t.c+';">'+t.l+'</span>'
         +'</div>'
         +'<div style="display:flex;flex-direction:column;gap:4px;" onclick="event.stopPropagation();">'
-        +'<button class="btn br" style="padding:6px 10px;width:auto;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>'
+        +(i.st==='em_andamento'?'<button class="btn br" style="padding:6px 10px;width:auto;font-size:11px;" onclick="retomarF(\''+i.id+'\')">Retomar</button>':'<button class="btn" style="padding:6px 10px;width:auto;font-size:11px;background:#0f766e;color:#fff;" onclick="openDet(\''+i.id+'\')">Ver</button>')
         +'<button class="btn bo" style="padding:6px 10px;width:auto;font-size:11px;" onclick="openDet(\''+i.id+'\')">Ver</button>'
         +'</div></div>';
     });
@@ -3997,6 +4010,10 @@ function rFConc(c){
 /* ── Editar relatório finalizado (bloqueia comarca e edificação) ── */
 function editarRelatorio(id){
   var i=S.insp.find(function(x){return x.id===id;});if(!i)return;
+  /* v75: backup no cofre ANTES de abrir para edição.
+     Garante que a versão finalizada existe no fin_store mesmo que o usuário
+     cancele, o app recarregue ou o autosave escreva algo inesperado. */
+  if(i.st==='finalizada')PhotoStore.putFinalizado(JSON.parse(JSON.stringify(i)));
   var t=TIPOS[i.tipo]||TIPOS.periodica;
   var sess=S.sessao||{};
   if(i.snap){
@@ -4067,8 +4084,11 @@ function salvarEdicao(){
   if(i){
     i.st='finalizada';
     i.updated_at=new Date().toISOString();
+    i._finalizadoEm=i.updated_at;
     if(!i.protocolo)i.protocolo=gerarProtocolo(i);
-    DB.sv();
+    /* v75: SÍNCRONO + cofre imutável */
+    DB.svSync();
+    PhotoStore.putFinalizado(JSON.parse(JSON.stringify(i)));
   }
   F._editando=false;
   Tt('✅ Relatório atualizado com sucesso!');
@@ -4110,7 +4130,10 @@ function salvarF(){
     if(F.tipo==='periodica'||F.tipo==='ose'||F.tipo==='programada'){i.dtVistoriaFim=F.d.dtVistoriaFim||'';}
     /* Grava protocolo definitivo no momento da finalização (Fix #2) */
     if(!i.protocolo)i.protocolo=gerarProtocolo(i);
-    DB.sv();
+    i._finalizadoEm=i.updated_at||new Date().toISOString();
+    /* v75: SÍNCRONO + cofre imutável */
+    DB.svSync();
+    PhotoStore.putFinalizado(JSON.parse(JSON.stringify(i)));
   }
   F._editando=false;
   var _prot=i&&i.protocolo?i.protocolo:'';
