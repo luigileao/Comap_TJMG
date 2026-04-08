@@ -361,6 +361,9 @@ var Sync={
           S.insp=S.insp.filter(function(i){
             if(_pendDel.some(function(e){return e===i.id||(e&&e.id===i.id);}))return false;
             if(i.st==='em_andamento'&&remoteIds.indexOf(i.id)===-1)return true;
+            /* v77-fix: nunca descartar finalizada não confirmada pelo servidor —
+               protege contra race condition pull-antes-push */
+            if(i.st==='finalizada'&&!i.synced_at&&remoteIds.indexOf(i.id)===-1)return true;
             return remoteIds.indexOf(i.id)!==-1;
           });
         }
@@ -385,6 +388,9 @@ var Sync={
              Se o item JÁ estava no Supabase e foi deletado por qualquer
              usuário, remove localmente independente do status. */
           if(i.st==='em_andamento'&&remoteIds.indexOf(i.id)===-1)return true;
+          /* v77-fix: nunca descartar finalizada não confirmada pelo servidor —
+             protege contra race condition pull-antes-push */
+          if(i.st==='finalizada'&&!i.synced_at&&remoteIds.indexOf(i.id)===-1)return true;
           return remoteIds.indexOf(i.id)!==-1;
         });
       }

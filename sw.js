@@ -16,7 +16,7 @@
         index.html: 5663 → 4791 linhas (−872 / −15%).
 */
 
-const V = 'tjmg-v76';
+const V = 'tjmg-v77';
 const CACHE = [
   './',
   './index.html',
