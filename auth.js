@@ -300,4 +300,4 @@ window.coordSelAll    = coordSelAll;
 window.coordExpSel    = coordExpSel;
 window.openDetCoord   = openDetCoord;
 window.cancelPin      = cancelPin;
-window.coordExpSelPDF = coordExpSelPDF;
+/* coordExpSelPDF definida no script inline do index.html — já é global, não precisa re-exportar */
