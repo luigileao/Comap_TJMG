@@ -28,17 +28,17 @@ var F={
 };
 
 
-var SUPABASE_URL='https://afdpeaefqjwbzbqckesv.supabase.co';
-var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmZHBlYWVmcWp3YnpicWNrZXN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDQ0NTgsImV4cCI6MjA5MDQ4MDQ1OH0.lUUwFpJ0juTVuqB46xiaplB8KVIgeVAWBLNnSbwXF-c';
+var SUPABASE_URL='https://mjhmadtkwwkufakplrrj.supabase.co';
+var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaG1hZHRrd3drdWZha3BscnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTQ5MTQsImV4cCI6MjA4OTYzMDkxNH0.njut4xTQCHtvbtzonCcUVdOSiAUwl_CKphEVfjAy_gc';
 var SUPABASE_PUBLISHABLE_KEY=SUPABASE_ANON_KEY; /* alias — sync.js usa este nome */
 /* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://afdpeaefqjwbzbqckesv.supabase.co/functions/v1/tjmg-sync'; // v65
-var EDGE_EMAIL_URL='https://afdpeaefqjwbzbqckesv.supabase.co/functions/v1/send-report-email'; // v65
+var EDGE_SYNC_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/tjmg-sync'; // v65
+var EDGE_EMAIL_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/send-report-email'; // v65
 /* Segredo compartilhado com a Edge Function.
    SETUP: Supabase Dashboard → Edge Functions → tjmg-sync → Secrets → SYNC_SECRET
    Deve ser idêntico ao valor configurado no painel Supabase.
    ⚠ NUNCA deixar vazio em produção — qualquer cliente poderia fazer push de dados. */
-var SYNC_SECRET='TJMG-FISCAL-2026-COMAP-NORTE'; /* v77: segredo padrão — troque por valor único no Supabase Secrets */
+var SYNC_SECRET=''; /* igual v71 — sem secret, Edge Function aceita qualquer chamada */ /* v77: segredo padrão — troque por valor único no Supabase Secrets */
 // ── Google Drive (Apps Script) ─────────────────────────────────────────────
 // Cole aqui a URL gerada após publicar o TJMG_Drive.gs como Web App
 var DRIVE_SCRIPT_URL='https://script.google.com/macros/s/AKfycbzJsl9A3jweqcxHv0Ibm_2aEeEc4m8F1gGkurGxkcW_TUWpx_PH2ABOaccdYI3AUro/exec';
