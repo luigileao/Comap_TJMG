@@ -429,9 +429,9 @@ function _gerarHTMLStr(id) {
       else if (s==='fora_periodo') stats.fp++;
       else if (s==='programado')  stats.prog++;
       if (it.fotos && it.fotos.length) stats.fotos += it.fotos.length;
-      if (it.mats  && it.mats.length)  stats.mats  += it.mats.length;
+      /* stats.mats é derivado de _matsC após consolidação — não contar aqui */
     });
-    if (i.mats && i.mats.length) stats.mats += i.mats.length;
+    /* stats.mats será atribuído abaixo, após _matsC ser calculado */
 
     var _isOse  = i.tipo === 'ose';
     var _pct    = _isOse
@@ -559,20 +559,28 @@ function _gerarHTMLStr(id) {
     }
 
     /* ── Materiais consolidados ── */
+    /* ── Materiais consolidados: usa i.mats (já sincronizado pelo app) como
+       fonte única. Só cai nos itens como fallback se i.mats estiver vazio,
+       evitando assim a dupla contagem que ocorria ao somar as duas fontes. ── */
     var _matsMap = {};
-    (i.mats || []).forEach(function(m){
-      if (!m || !m.c) return;
-      if (_matsMap[m.c]) _matsMap[m.c].q = parseFloat(_matsMap[m.c].q || 0) + parseFloat(m.q || 0);
-      else               _matsMap[m.c] = { c:m.c, d:m.d, u:m.u, q:parseFloat(m.q || 0) };
-    });
-    ovals(i.itens || {}).forEach(function(it){
-      (it.mats || []).forEach(function(m){
+    if (i.mats && i.mats.length) {
+      (i.mats).forEach(function(m){
         if (!m || !m.c) return;
         if (_matsMap[m.c]) _matsMap[m.c].q = parseFloat(_matsMap[m.c].q || 0) + parseFloat(m.q || 0);
         else               _matsMap[m.c] = { c:m.c, d:m.d, u:m.u, q:parseFloat(m.q || 0) };
       });
-    });
+    } else {
+      /* fallback: relatório gerado sem etapa Materiais concluída */
+      ovals(i.itens || {}).forEach(function(it){
+        (it.mats || []).forEach(function(m){
+          if (!m || !m.c) return;
+          if (_matsMap[m.c]) _matsMap[m.c].q = parseFloat(_matsMap[m.c].q || 0) + parseFloat(m.q || 0);
+          else               _matsMap[m.c] = { c:m.c, d:m.d, u:m.u, q:parseFloat(m.q || 0) };
+        });
+      });
+    }
     var _matsC = Object.keys(_matsMap).map(function(k){ return _matsMap[k]; });
+    stats.mats = _matsC.length; /* contagem única, sem dupla contagem */
     var matsGerais = '';
     if (_matsC.length) {
       matsGerais = '<div class="mat-sec">'

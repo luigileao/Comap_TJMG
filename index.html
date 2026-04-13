@@ -3164,9 +3164,12 @@ function ospCalcFinal(){
 /* ── Sincroniza materiais adicionados nos itens para a lista global ── */
 function sincronizarMatsGlobais(itens, matsGlobal){
   var mapa={};
-  /* Primeiro: preserva todos os que já estão na lista global (adicionados manualmente) */
+  /* Primeiro: preserva APENAS os verdadeiramente manuais (_origem:'manual').
+     Itens com _origem:'item' são descartados aqui e sempre recalculados abaixo,
+     garantindo que remoções/adições de atividades reflitam corretamente. */
   (matsGlobal||[]).forEach(function(m){
     if(!m||!m.c)return;
+    if(m._origem!=='manual')return; /* ignora itens de atividade — serão recalculados */
     if(!mapa[m.c])mapa[m.c]={c:m.c,d:m.d,u:m.u,q:parseFloat(m.q)||1,_origem:'manual'};
     else mapa[m.c].q=parseFloat(mapa[m.c].q||0)+parseFloat(m.q||0);
   });
@@ -3317,7 +3320,7 @@ function rML(){
         +'<div class="lbl" style="margin-bottom:0;white-space:nowrap;">Qtd.:</div>'
         +'<input type="number" step="0.01" min="0.01" value="'+_q+'" '
         +'style="width:80px;text-align:center;font-size:16px;font-weight:800;padding:8px;border-radius:8px;border:1.5px solid #2563eb;" '
-        +'oninput="F.mats['+_realIx+'].q=parseFloat(this.value)||1">'
+        +'oninput="F.mats['+_realIx+'].q=parseFloat(this.value)||1;F.mats['+_realIx+']._origem=\'manual\';">'  
         +'<span style="font-size:12px;font-weight:600;color:#64748b;flex:1;">'+m.u+'</span>'
         +'<button onclick="F.mats.splice('+_realIx+',1);rML();" '
         +'style="border:none;background:#fee2e2;color:#dc2626;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;flex-shrink:0;">✕</button>'
