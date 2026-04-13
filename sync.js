@@ -398,7 +398,26 @@ var Sync={
     }catch(e){console.warn('Pull falhou',e);}
   },
   pushUsers:async function(){
-    /* Usuários são leves e não disparam trigger pesada — usa SDK direto */
+    /* v77-fix CORS: quando useEdge=true roteia pela Edge Function (mesmo caminho do pushInspections).
+       Chamada direta ao PostgREST era bloqueada por CORS do GitHub Pages. */
+    if(this.useEdge){
+      var payload=US.map(this.normalizeUser.bind(this));
+      var delUsers=this.deletedUsers.slice();
+      if(!payload.length&&!delUsers.length)return;
+      var _h={'Content-Type':'application/json'};
+      if(SYNC_SECRET)_h['x-sync-secret']=SYNC_SECRET;
+      var resp=await fetch(EDGE_SYNC_URL+'/push',{
+        method:'POST',
+        headers:_h,
+        body:JSON.stringify({inspections:[],deleteInsps:[],users:payload,deleteUsers:delUsers})
+      });
+      if(!resp.ok)throw new Error('Edge push users HTTP '+resp.status);
+      var d=await resp.json();
+      if(!d.ok)throw new Error(d.error||'Edge push users erro');
+      this.deletedUsers=[];this.saveState();
+      return;
+    }
+    /* Fallback: SDK direto (quando Edge Function não está configurada) */
     if(!SB)return;
     var payload=US.map(this.normalizeUser.bind(this));
     if(payload.length){

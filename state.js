@@ -28,12 +28,12 @@ var F={
 };
 
 
-var SUPABASE_URL='https://mjhmadtkwwkufakplrrj.supabase.co';
-var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qaG1hZHRrd3drdWZha3BscnJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTQ5MTQsImV4cCI6MjA4OTYzMDkxNH0.njut4xTQCHtvbtzonCcUVdOSiAUwl_CKphEVfjAy_gc';
+var SUPABASE_URL='https://nvjxylgdnashebaepern.supabase.co';
+var SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52anh5bGdkbmFzaGViYWVwZXJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTEzNTMsImV4cCI6MjA5MDUyNzM1M30.oa88CQ_IOyDm-LcV5iPDUEoWK5RpV0PSCt_yxF3ZNdo';
 var SUPABASE_PUBLISHABLE_KEY=SUPABASE_ANON_KEY; /* alias — sync.js usa este nome */
 /* ── Edge Function (v64) — substitui chamadas diretas ao SDK quando disponível ── */
-var EDGE_SYNC_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/tjmg-sync'; // v65
-var EDGE_EMAIL_URL='https://mjhmadtkwwkufakplrrj.supabase.co/functions/v1/send-report-email'; // v65
+var EDGE_SYNC_URL='https://nvjxylgdnashebaepern.supabase.co/functions/v1/tjmg-sync'; // v65
+var EDGE_EMAIL_URL='https://nvjxylgdnashebaepern.supabase.co/functions/v1/send-report-email'; // v65
 /* Segredo compartilhado com a Edge Function.
    SETUP: Supabase Dashboard → Edge Functions → tjmg-sync → Secrets → SYNC_SECRET
    Deve ser idêntico ao valor configurado no painel Supabase.
